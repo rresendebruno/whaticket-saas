@@ -174,6 +174,7 @@ const sendMessage = async (
 
   try {
     const result = await zapiPost("/send-text", payload);
+    logger.info({ msg: "Z-API sendMessage response", phone, result });
     return {
       id: result?.messageId || result?.id || `zapi-${Date.now()}`,
       body,
