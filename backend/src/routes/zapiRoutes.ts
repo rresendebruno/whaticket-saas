@@ -83,8 +83,15 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
     // Group IDs can be alphanumeric (e.g. "120363xxx-ABCdef") — only strip the @g.us suffix
     const groupPhone = groupRawPhone.replace(/@.+$/, "");
 
+    // For group messages, Z-API sometimes returns the group name as senderName when
+    // the participant's number isn't in the device address book. Guard against that.
+    const senderName: string =
+      isGroup && payload.senderName === payload.chatName
+        ? phone
+        : payload.senderName || phone;
+
     const contactPayload: ContactPayload = {
-      name: payload.senderName || phone,
+      name: senderName,
       number: phone,
       profilePicUrl: payload.senderPhoto || undefined,
       isGroup: false
