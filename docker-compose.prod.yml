@@ -1,0 +1,119 @@
+version: '3'
+
+# ============================================================
+# WhaTicket Community - Produção com Traefik
+# ============================================================
+# Pré-requisitos na VPS:
+#   - Traefik v2+ rodando com rede externa chamada "proxy"
+#     (se sua rede tem outro nome, ajuste todas as ocorrências de
+#      "proxy" neste arquivo e no label traefik.docker.network)
+#   - Entrypoints: "web" (porta 80) e "websecure" (porta 443)
+#   - Certificate resolver chamado "letsencrypt"
+#     (se o nome for diferente, ajuste "certresolver=letsencrypt"
+#      nas labels abaixo)
+#   - DNS: DOIS registros A apontando para o IP da VPS:
+#       chat.cloudconnectivity.com.br  → IP da VPS
+#       api.cloudconnectivity.com.br   → IP da VPS
+#
+# Uso:
+#   cp .env.production.example .env
+#   # edite .env com as senhas e tokens reais
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Para verificar o nome da sua rede Traefik:
+#   docker network ls | grep -i traefik
+# Para verificar o certresolver configurado:
+#   cat /etc/traefik/traefik.yml | grep -A5 certificatesResolvers
+# ============================================================
+
+networks:
+  whaticket:
+  proxy:
+    external: true  # rede criada pelo Traefik na VPS
+
+services:
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: ./Dockerfile
+    environment:
+      - DB_HOST=mysql
+      - DB_USER=root
+      - DB_PASS=${MYSQL_ROOT_PASSWORD}
+      - DB_NAME=${MYSQL_DATABASE:-whaticket}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+      - BACKEND_URL=${BACKEND_URL}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - PROXY_PORT=${PROXY_PORT:-443}
+      - WHATSAPP_PROVIDER=${WHATSAPP_PROVIDER:-zapi}
+      - ZAPI_INSTANCE_ID=${ZAPI_INSTANCE_ID}
+      - ZAPI_TOKEN=${ZAPI_TOKEN}
+      - ZAPI_CLIENT_TOKEN=${ZAPI_CLIENT_TOKEN}
+      - ZAPI_PUBLIC_URL=${ZAPI_PUBLIC_URL}
+    volumes:
+      - ./backend/public/:/usr/src/app/public/
+    networks:
+      - whaticket
+      - proxy
+    restart: always
+    depends_on:
+      - mysql
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.whaticket-backend.rule=Host(`api.cloudconnectivity.com.br`)"
+      - "traefik.http.routers.whaticket-backend.entrypoints=websecure"
+      - "traefik.http.routers.whaticket-backend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.whaticket-backend.loadbalancer.server.port=3000"
+      # HTTP redirect para backend
+      - "traefik.http.routers.whaticket-backend-http.rule=Host(`api.cloudconnectivity.com.br`)"
+      - "traefik.http.routers.whaticket-backend-http.entrypoints=web"
+      - "traefik.http.routers.whaticket-backend-http.middlewares=whaticket-https-redirect"
+      - "traefik.http.middlewares.whaticket-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.whaticket-https-redirect.redirectscheme.permanent=true"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ./Dockerfile
+    environment:
+      - URL_BACKEND=backend:3000
+      - VITE_BACKEND_URL=${BACKEND_URL}/
+      - FRONTEND_SERVER_NAME=${FRONTEND_SERVER_NAME}
+      - BACKEND_SERVER_NAME=
+    volumes:
+      - ./ssl/www/:/var/www/letsencrypt/
+    networks:
+      - whaticket
+      - proxy
+    restart: always
+    depends_on:
+      - backend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.whaticket-frontend.rule=Host(`chat.cloudconnectivity.com.br`)"
+      - "traefik.http.routers.whaticket-frontend.entrypoints=websecure"
+      - "traefik.http.routers.whaticket-frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.whaticket-frontend.loadbalancer.server.port=80"
+      # HTTP redirect para frontend
+      - "traefik.http.routers.whaticket-frontend-http.rule=Host(`chat.cloudconnectivity.com.br`)"
+      - "traefik.http.routers.whaticket-frontend-http.entrypoints=web"
+      - "traefik.http.routers.whaticket-frontend-http.middlewares=whaticket-https-redirect"
+
+  mysql:
+    image: ${MYSQL_ENGINE:-mariadb}:${MYSQL_VERSION:-10.6}
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_bin
+    volumes:
+      - ./.docker/data/:/var/lib/mysql
+    environment:
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-whaticket}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_ROOT_HOST=%
+      - TZ=${TZ:-America/Sao_Paulo}
+    restart: always
+    networks:
+      - whaticket
+    # MySQL NÃO é exposto externamente em produção

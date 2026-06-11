@@ -1,0 +1,10 @@
+.docker/data/
+ssl/certs/**
+ssl/www/**
+!ssl/certs/.gitkeep
+!ssl/www/.gitkeep
+.env
+.env.production
+.wwebjs_auth
+.wwebjs_cache
+.idea
