@@ -98,12 +98,15 @@ const init = async (whatsapp: Whatsapp): Promise<void> => {
     const statusWebhook = `${publicUrl}/zapi/webhook-status/${whatsapp.id}`;
 
     try {
+      // Incoming messages (+ "Notificar enviadas por mim" sends SENT status here too)
       await zapiPut("/update-webhook-received", { value: msgWebhook });
-      // ACK callbacks (SentCallback, DeliveredCallback, ReadCallback) use the same endpoint
-      await zapiPut("/update-webhook-message-ack", { value: msgWebhook });
+      // "Receber status da mensagem" = DELIVERED / READ ACK → must go to message handler, NOT status handler
+      await zapiPut("/update-webhook-status", { value: msgWebhook });
+      // Try additional ACK endpoint names (varies by Z-API version)
+      await zapiPut("/update-webhook-message-ack", { value: msgWebhook }).catch(() => {});
+      // Connection events
       await zapiPut("/update-webhook-disconnected", { value: statusWebhook });
-      await zapiPut("/update-webhook-status", { value: statusWebhook });
-      logger.info(`Z-API webhooks set: ${msgWebhook}`);
+      logger.info(`Z-API webhooks set: msgWebhook=${msgWebhook}`);
     } catch (err) {
       logger.warn({ msg: "Could not set Z-API webhooks", err });
     }
