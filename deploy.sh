@@ -3,7 +3,7 @@
 # WhaTicket Community - Script de deploy na VPS
 # =============================================================================
 # Execute como root ou com sudo na VPS Ubuntu 20.04.
-# Pré-requisito: Docker, Docker Compose e Traefik já instalados.
+# Pré-requisito: Docker, docker-compose e Traefik já instalados.
 #
 # Uso:
 #   chmod +x deploy.sh
@@ -30,9 +30,8 @@ for VAR in MYSQL_ROOT_PASSWORD JWT_SECRET JWT_REFRESH_SECRET ZAPI_INSTANCE_ID ZA
 done
 
 # ---------- Detectar nome da rede do Traefik ----------
-# Verifica redes comuns usadas pelo Traefik
 TRAEFIK_NETWORK=""
-for NET in proxy traefik traefik_public traefik-public; do
+for NET in traefik-network proxy traefik traefik_public traefik-public; do
   if docker network ls --format '{{.Name}}' | grep -qx "$NET"; then
     TRAEFIK_NETWORK="$NET"
     break
@@ -40,17 +39,16 @@ for NET in proxy traefik traefik_public traefik-public; do
 done
 
 if [ -z "$TRAEFIK_NETWORK" ]; then
-  echo "[ERRO] Nenhuma rede do Traefik encontrada (proxy, traefik, traefik_public, traefik-public)."
+  echo "[ERRO] Nenhuma rede do Traefik encontrada."
   echo "       Crie a rede antes de continuar: docker network create proxy"
   exit 1
 fi
 
 echo "[INFO] Rede do Traefik detectada: $TRAEFIK_NETWORK"
 
-# Substitui o nome da rede no compose se necessário
 if [ "$TRAEFIK_NETWORK" != "proxy" ]; then
   echo "[INFO] Ajustando docker-compose.prod.yml para usar a rede '$TRAEFIK_NETWORK'..."
-  sed -i "s/proxy:/  $TRAEFIK_NETWORK:/g; s/traefik.docker.network=proxy/traefik.docker.network=$TRAEFIK_NETWORK/g" docker-compose.prod.yml
+  sed -i "s/proxy:/$TRAEFIK_NETWORK:/g; s/traefik.docker.network=proxy/traefik.docker.network=$TRAEFIK_NETWORK/g" docker-compose.prod.yml
 fi
 
 # ---------- Cria diretórios necessários ----------
@@ -61,7 +59,7 @@ mkdir -p backend/public
 
 # ---------- Build e subida dos containers ----------
 echo "[INFO] Construindo imagens e subindo containers..."
-docker compose -f docker-compose.prod.yml up -d --build
+docker-compose -f docker-compose.prod.yml up -d --build
 
 echo ""
 echo "============================================================"
@@ -71,5 +69,5 @@ echo " Frontend : https://chat.cloudconnectivity.com.br"
 echo " Backend  : https://api.cloudconnectivity.com.br"
 echo ""
 echo " Acompanhe os logs:"
-echo "   docker compose -f docker-compose.prod.yml logs -f"
+echo "   docker-compose -f docker-compose.prod.yml logs -f"
 echo "============================================================"
