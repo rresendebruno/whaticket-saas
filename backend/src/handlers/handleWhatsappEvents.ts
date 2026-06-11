@@ -151,9 +151,15 @@ const zapiChatbotPost = async (path: string, body: object): Promise<void> => {
   const clientToken = process.env.ZAPI_CLIENT_TOKEN || "";
   if (!id || !token) return;
   const url = `https://api.z-api.io/instances/${id}/token/${token}${path}`;
-  await axios.post(url, body, {
-    headers: { "Content-Type": "application/json", "Client-Token": clientToken }
-  });
+  try {
+    const { data } = await axios.post(url, body, {
+      headers: { "Content-Type": "application/json", "Client-Token": clientToken }
+    });
+    logger.info({ msg: "zapiChatbotPost ok", path, response: data });
+  } catch (err: any) {
+    logger.error({ msg: "zapiChatbotPost error", path, zapiError: err?.response?.data || err?.message });
+    throw err;
+  }
 };
 
 const sendChatbotMenu = async (
@@ -212,9 +218,11 @@ const handleChatbotLogic = async (
       order: [[{ model: ChatbotOption, as: "options" }, "option", "ASC"]]
     });
 
+    logger.info({ msg: "Chatbot: found", enabled: chatbot?.enabled, options: chatbot?.options?.length });
     if (!chatbot || !chatbot.enabled || !chatbot.options?.length) return false;
 
     const input = (messageBody || "").trim();
+    logger.info({ msg: "Chatbot: input received", input, ticketId: ticket.id });
     const matched = chatbot.options.find(opt => opt.option === input);
 
     if (matched && matched.queueId) {
