@@ -181,16 +181,14 @@ const sendChatbotMenu = async (
   }
 
   if (isZapi && options.length <= 10) {
-    await zapiChatbotPost("/send-list", {
+    await zapiChatbotPost("/send-option-list", {
       phone,
       message: greetingMessage,
-      buttonLabel: "Ver opções",
-      sections: [
-        {
-          title: "Departamentos",
-          rows: options.map(opt => ({ id: opt.option, title: opt.title, description: "" }))
-        }
-      ]
+      optionList: {
+        title: "Opções de atendimento",
+        buttonLabel: "Ver opções",
+        options: options.map(opt => ({ id: opt.option, title: opt.title, description: "" }))
+      }
     });
     return;
   }
