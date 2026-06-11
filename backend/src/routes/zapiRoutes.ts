@@ -51,20 +51,10 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
   res.status(200).json({ ok: true });
 
   try {
-    // Diagnostic: log every webhook so we can see what Z-API sends for ACK
-    if (payload.type === "MessageStatusCallback") {
-      // Log full payload (minus large body fields) to find the messageId field name
-      const { text: _t, image: _i, audio: _a, video: _v, document: _d, ...meta } = payload;
-      logger.info({ msg: "Z-API MessageStatusCallback full", ...meta });
-    } else {
-      logger.info({
-        msg: "Z-API webhook IN",
-        type: payload.type,
-        fromMe: payload.fromMe,
-        fromApi: payload.fromApi,
-        status: payload.status,
-        msgId: payload.messageId
-      });
+    // Diagnostic: log all webhook fields (minus large media) to understand Z-API payload structure
+    {
+      const { text: _t, image: _i, audio: _a, video: _v, document: _d, sticker: _s, ...meta } = payload;
+      logger.info({ msg: "Z-API webhook IN", ...meta });
     }
 
     // Handle message revoke (client deleted their own message)
