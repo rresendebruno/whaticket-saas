@@ -560,6 +560,7 @@ export const handleMessageAck = async (
     });
 
     if (!messageToUpdate) {
+      logger.warn({ msg: "handleMessageAck: message not found in DB", messageId, ack });
       return;
     }
 
