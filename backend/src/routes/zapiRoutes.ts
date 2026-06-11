@@ -50,9 +50,6 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
   res.status(200).json({ ok: true });
 
   try {
-    // Debug: log full payload keys to diagnose option-list reply format
-    logger.info({ msg: "Z-API webhook received", type: payload.type, fromMe: payload.fromMe, phone: payload.phone, keys: Object.keys(payload), payload: JSON.stringify(payload).slice(0, 500) });
-
     // Handle message revoke (client deleted their own message)
     if (payload.isRevoked === true || payload.type === "REVOKE") {
       const revokedId: string = payload.messageId || payload.id || "";
@@ -102,8 +99,12 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
     if (payload.buttonReply) {
       body = payload.buttonReply.selectedButtonId || payload.buttonReply.selectedDisplayText || "";
       msgType = "chat";
+    } else if (payload.listResponseMessage) {
+      // Option-list reply (/send-option-list) — Z-API uses listResponseMessage
+      body = payload.listResponseMessage.id || payload.listResponseMessage.title || "";
+      msgType = "chat";
     } else if (payload.listReply) {
-      // List reply (user selected from list message)
+      // Legacy list reply format
       body = payload.listReply.selectedRowId || "";
       msgType = "chat";
     } else if (payload.text) {
