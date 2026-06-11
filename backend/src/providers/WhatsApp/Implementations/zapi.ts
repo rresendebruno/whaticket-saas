@@ -263,10 +263,13 @@ const sendMedia = async (
       msgType = "video";
     } else {
       // Z-API document endpoint: /send-document/{extension} (extension is a path param)
+      // Z-API auto-appends the extension from the URL, so strip it from fileName to avoid doubling
+      const parts = (media.filename || "file").split(".");
+      const fileNameBase = parts.length > 1 ? parts.slice(0, -1).join(".") : parts[0];
       result = await zapiPost(`/send-document/${fileExt}`, {
         phone,
         document: mediaSource,
-        fileName: media.filename || "file",
+        fileName: fileNameBase,
         caption,
         ...(quotedMessageId && { messageId: quotedMessageId })
       });
