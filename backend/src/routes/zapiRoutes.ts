@@ -175,9 +175,14 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
         : payload.senderName || phone;
 
     // chatLid is the WhatsApp LID for this contact — stored so MessageStatusCallback
-    // can look up the contact when phone arrives in "255...@lid" format
-    const contactLid: string | undefined = !isGroup
-      ? (payload.chatLid || payload.participantLid || undefined)
+    // can look up the contact when phone arrives in "255...@lid" format.
+    // Z-API sends chatLid with "@lid" suffix (e.g. "255254251761678@lid") — strip it
+    // so it matches the lookup in MessageStatusCallback (which also strips @lid).
+    const rawChatLid: string = !isGroup
+      ? (payload.chatLid || payload.participantLid || "")
+      : "";
+    const contactLid: string | undefined = rawChatLid
+      ? rawChatLid.replace(/@lid$/, "")
       : undefined;
 
     const contactPayload: ContactPayload = {
