@@ -3,7 +3,7 @@ import Message from "../../models/Message";
 import Ticket from "../../models/Ticket";
 import { whatsappProvider, ProviderMessage } from "../../providers/WhatsApp";
 import CreateMessageService from "../MessageServices/CreateMessageService";
-
+import { logger } from "../../utils/logger";
 import formatBody from "../../helpers/Mustache";
 
 interface Request {
@@ -53,7 +53,8 @@ const SendWhatsAppMessage = async ({
     });
 
     return sentMessage;
-  } catch (err) {
+  } catch (err: any) {
+    logger.error({ msg: "SendWhatsAppMessage error", ticketId: ticket.id, chatId, err: err?.message || err });
     throw new AppError("ERR_SENDING_WAPP_MSG");
   }
 };

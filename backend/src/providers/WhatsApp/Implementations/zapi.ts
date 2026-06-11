@@ -165,24 +165,29 @@ const sendMessage = async (
   options?: SendMessageOptions
 ): Promise<ProviderMessage> => {
   const phone = cleanPhone(to);
+  logger.info({ msg: "Z-API sendMessage", phone, bodyLen: body.length });
 
   const payload: Record<string, unknown> = { phone, message: body };
   if (options?.quotedMessageId) {
     payload.messageId = options.quotedMessageId;
   }
 
-  const result = await zapiPost("/send-text", payload);
-
-  return {
-    id: result?.messageId || result?.id || `zapi-${Date.now()}`,
-    body,
-    fromMe: true,
-    hasMedia: false,
-    type: "chat",
-    timestamp: Math.floor(Date.now() / 1000),
-    from: "",
-    to: phone
-  };
+  try {
+    const result = await zapiPost("/send-text", payload);
+    return {
+      id: result?.messageId || result?.id || `zapi-${Date.now()}`,
+      body,
+      fromMe: true,
+      hasMedia: false,
+      type: "chat",
+      timestamp: Math.floor(Date.now() / 1000),
+      from: "",
+      to: phone
+    };
+  } catch (err: any) {
+    logger.error({ msg: "Z-API sendMessage error", phone, zapiError: err?.response?.data || err?.message });
+    throw err;
+  }
 };
 
 const sendMedia = async (
