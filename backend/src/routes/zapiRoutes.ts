@@ -93,7 +93,7 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
     const contactPayload: ContactPayload = {
       name: senderName,
       number: phone,
-      profilePicUrl: payload.senderPhoto || undefined,
+      profilePicUrl: payload.senderPhoto || payload.photo || undefined,
       isGroup: false
     };
 

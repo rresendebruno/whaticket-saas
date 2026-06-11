@@ -344,10 +344,17 @@ const getContacts = async (_sessionId: number): Promise<ProviderContact[]> => {
 
 const sendSeen = async (
   _sessionId: number,
-  _chatId: string
+  chatId: string,
+  messageId?: string
 ): Promise<void> => {
-  // Z-API requires a specific messageId for read receipts
-  // Best-effort: no-op here, messages still displayed correctly in WhaTicket
+  if (!messageId) return;
+  try {
+    const phone = cleanPhone(chatId);
+    await zapiPost("/read-message", { phone, messageId });
+  } catch (err: any) {
+    // Non-critical — log at warn level, don't throw
+    logger.warn({ msg: "Z-API sendSeen error", phone: cleanPhone(chatId), zapiError: err?.response?.data || err?.message });
+  }
 };
 
 const fetchChatMessages = async (

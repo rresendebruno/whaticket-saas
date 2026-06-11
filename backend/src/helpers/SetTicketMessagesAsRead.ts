@@ -5,6 +5,12 @@ import { logger } from "../utils/logger";
 import { whatsappProvider } from "../providers/WhatsApp";
 
 const SetTicketMessagesAsRead = async (ticket: Ticket): Promise<void> => {
+  // Find the last received message before marking as read — needed for Z-API sendSeen
+  const lastMsg = await Message.findOne({
+    where: { ticketId: ticket.id, fromMe: false },
+    order: [["createdAt", "DESC"]]
+  });
+
   await Message.update(
     { read: true },
     {
@@ -21,7 +27,8 @@ const SetTicketMessagesAsRead = async (ticket: Ticket): Promise<void> => {
     if (ticket.whatsappId) {
       await whatsappProvider.sendSeen(
         ticket.whatsappId,
-        `${ticket.contact.number}@${ticket.isGroup ? "g" : "c"}.us`
+        `${ticket.contact.number}@${ticket.isGroup ? "g" : "c"}.us`,
+        lastMsg?.id
       );
     }
   } catch (err) {

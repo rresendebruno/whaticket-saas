@@ -409,6 +409,13 @@ export const handleMessage = async (
       isGroup: contactPayload.isGroup
     });
 
+    // If no photo came from the webhook, fetch from Z-API asynchronously (fire-and-forget)
+    if (!contact.profilePicUrl && !contactPayload.isGroup) {
+      whatsappProvider.getProfilePicUrl(contextPayload.whatsappId, contactPayload.number)
+        .then(url => { if (url) contact.update({ profilePicUrl: url }); })
+        .catch(() => {});
+    }
+
     let groupContact: Contact | undefined;
     if (contextPayload.groupContact) {
       groupContact = await CreateOrUpdateContactService({
@@ -418,6 +425,13 @@ export const handleMessage = async (
         profilePicUrl: contextPayload.groupContact.profilePicUrl,
         isGroup: contextPayload.groupContact.isGroup
       });
+
+      // Fetch group photo if missing
+      if (!groupContact.profilePicUrl) {
+        whatsappProvider.getProfilePicUrl(contextPayload.whatsappId, contextPayload.groupContact.number)
+          .then(url => { if (url) groupContact!.update({ profilePicUrl: url }); })
+          .catch(() => {});
+      }
     }
 
     const whatsapp = await ShowWhatsAppService(contextPayload.whatsappId);

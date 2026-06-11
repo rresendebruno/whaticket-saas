@@ -388,7 +388,7 @@ const getProfilePicUrl = async (
   return profilePicUrl;
 };
 
-const sendSeen = async (sessionId: number, chatId: string): Promise<void> => {
+const sendSeen = async (sessionId: number, chatId: string, _messageId?: string): Promise<void> => {
   const wbot = getWbot(sessionId);
   const chat = await wbot.getChatById(chatId);
   await chat.sendSeen();

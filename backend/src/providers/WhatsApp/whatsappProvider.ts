@@ -35,7 +35,7 @@ export interface WhatsappProvider {
   checkNumber(sessionId: number, number: string): Promise<string>;
   getProfilePicUrl(sessionId: number, number: string): Promise<string>;
   getContacts(sessionId: number): Promise<ProviderContact[]>;
-  sendSeen(sessionId: number, chatId: string): Promise<void>;
+  sendSeen(sessionId: number, chatId: string, messageId?: string): Promise<void>;
   fetchChatMessages(
     sessionId: number,
     chatId: string,
