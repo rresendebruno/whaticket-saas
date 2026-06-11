@@ -51,6 +51,16 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
   res.status(200).json({ ok: true });
 
   try {
+    // Diagnostic: log every webhook so we can see what Z-API sends for ACK
+    logger.info({
+      msg: "Z-API webhook IN",
+      type: payload.type,
+      fromMe: payload.fromMe,
+      fromApi: payload.fromApi,
+      status: payload.status,
+      msgId: payload.messageId
+    });
+
     // Handle message revoke (client deleted their own message)
     if (payload.isRevoked === true || payload.type === "REVOKE") {
       const revokedId: string = payload.messageId || payload.id || "";
@@ -69,21 +79,41 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
     }
 
     // Message delivery / read ACK callbacks — update tick status in WhaTicket
+    // Pattern A: explicit callback types (some Z-API versions)
     // SentCallback=1(✓), DeliveredCallback=2(✓✓ grey), ReadCallback=3(✓✓ blue)
     if (
       payload.type === "DeliveredCallback" ||
       payload.type === "ReadCallback" ||
-      payload.type === "SentCallback"
+      payload.type === "SentCallback" ||
+      payload.type === "MessageDeliveredCallback" ||
+      payload.type === "MessageReadCallback" ||
+      payload.type === "MessageSentCallback"
     ) {
       const msgId: string = payload.messageId || payload.id || "";
       if (msgId) {
+        const t = payload.type;
         const ack: MessageAck =
-          payload.type === "ReadCallback" ? 3
-          : payload.type === "DeliveredCallback" ? 2
+          t === "ReadCallback" || t === "MessageReadCallback" ? 3
+          : t === "DeliveredCallback" || t === "MessageDeliveredCallback" ? 2
           : 1;
         await handleMessageAck(msgId, ack);
       }
       return;
+    }
+
+    // Pattern B: Z-API sends fromMe:true with a 'status' field for ACK updates
+    if (payload.fromMe && payload.messageId && payload.status) {
+      const s = String(payload.status).toUpperCase();
+      const ackByStatus: Record<string, MessageAck> = {
+        READ: 3, VIEWED: 3,
+        DELIVERED: 2, DEVICE: 2,
+        SERVER: 1, SENT: 1
+      };
+      const ack = ackByStatus[s];
+      if (ack !== undefined) {
+        await handleMessageAck(payload.messageId, ack);
+        return;
+      }
     }
 
     // Skip messages sent by our backend API (already saved by SendWhatsAppMessage)
