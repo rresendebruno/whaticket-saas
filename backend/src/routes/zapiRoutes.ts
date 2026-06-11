@@ -105,7 +105,9 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
       }
 
       // 2️⃣ LID-based fallback: phone is "255254251761678@lid"
-      // Find the contact by their stored LID, then update their latest sent message
+      // Z-API uses different ID spaces for send-text response vs MessageStatusCallback,
+      // so direct lookup almost always fails. Find contact by stored LID and update
+      // ALL pending sent messages in their latest ticket.
       const rawPhone: string = payload.phone || "";
       if (rawPhone.endsWith("@lid")) {
         const lid = rawPhone.replace(/@lid$/, "");
@@ -122,14 +124,19 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
               order: [["updatedAt", "DESC"]]
             });
             if (ticket) {
-              const msg = await Message.findOne({
-                where: { ticketId: ticket.id, fromMe: true, ack: { [Op.lt]: ack } },
-                order: [["createdAt", "DESC"]]
+              // Update ALL pending sent messages — not just the latest
+              const pendingMsgs = await Message.findAll({
+                where: { ticketId: ticket.id, fromMe: true, ack: { [Op.lt]: ack } }
               });
-              if (msg && msg.id !== directId) {
+              for (const msg of pendingMsgs) {
                 await handleMessageAck(msg.id, ack);
               }
+              if (pendingMsgs.length > 0) {
+                logger.info({ msg: "MessageStatusCallback LID: updated messages", lid, ack, count: pendingMsgs.length });
+              }
             }
+          } else {
+            logger.warn({ msg: "MessageStatusCallback LID: contact not found — LID not yet stored for this contact", lid, ack });
           }
         } catch (err) {
           logger.error({ msg: "MessageStatusCallback LID lookup error", err });

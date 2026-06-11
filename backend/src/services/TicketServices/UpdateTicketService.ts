@@ -86,7 +86,7 @@ const UpdateTicketService = async ({
       const attendantName = updatedTicket.user?.name;
       if (attendantName) {
         await SendWhatsAppMessage({
-          body: `Olá! Seu atendimento foi aceito pelo atendente *${attendantName}*. Em que posso ajudá-lo?`,
+          body: `Olá! Seu atendimento foi iniciado pelo atendente *${attendantName}*. Em que posso ajudá-lo?`,
           ticket: updatedTicket
         });
       }
