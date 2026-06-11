@@ -158,6 +158,12 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
     if (payload.fromMe && payload.isGroup) return;
     if (payload.type !== "ReceivedCallback") return;
 
+    // Skip WhatsApp Status updates (stories) — phone arrives as "status@broadcast"
+    // Skip newsletters and broadcast messages — they should not create tickets
+    if (String(payload.phone || "").includes("broadcast")) return;
+    if (String(payload.phone || "").includes("newsletter")) return;
+    if (payload.isNewsletter === true) return;
+
     const rawPhone: string = payload.participantPhone || payload.phone || "";
     const phone = rawPhone.replace(/\D/g, "");
     if (!phone) return;
