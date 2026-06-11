@@ -84,22 +84,58 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
       return;
     }
 
-    // MessageStatusCallback: Z-API's actual type for SENT/RECEIVED/READ ACK
-    // RECEIVED = delivered to device (✓✓ grey), READ = read by recipient (✓✓ blue)
+    // MessageStatusCallback: Z-API's actual ACK type (SENT/RECEIVED/READ)
+    // payload.ids is an array of WhatsApp native message IDs
+    // payload.phone is the recipient in "@lid" format (e.g. "255254251761678@lid")
     if (payload.type === "MessageStatusCallback") {
-      const msgId: string =
-        payload.messageId || payload.id || payload.referenceId || payload.zaapId || "";
       const s = String(payload.status || "").toUpperCase();
-      const ackByStatus: Record<string, MessageAck> = {
+      const ackMap: Record<string, MessageAck> = {
         SENT: 1,
-        RECEIVED: 2,   // delivered to recipient device
-        READ: 3        // read by recipient
-        // READ_BY_ME = we read their message — not a tick update on our sent messages
+        RECEIVED: 2,  // delivered to device (✓✓ grey)
+        READ: 3       // read by recipient (✓✓ blue)
+        // READ_BY_ME = we read an incoming msg — not relevant for tick display
       };
-      const ack = ackByStatus[s];
-      if (ack !== undefined && msgId) {
-        await handleMessageAck(msgId, ack);
+      const ack = ackMap[s];
+      if (ack === undefined) return;
+
+      // 1️⃣ Try direct lookup by ids[0] (may or may not match our stored message IDs)
+      const directId: string = Array.isArray(payload.ids) ? (payload.ids[0] || "") : "";
+      if (directId) {
+        await handleMessageAck(directId, ack);
       }
+
+      // 2️⃣ LID-based fallback: phone is "255254251761678@lid"
+      // Find the contact by their stored LID, then update their latest sent message
+      const rawPhone: string = payload.phone || "";
+      if (rawPhone.endsWith("@lid")) {
+        const lid = rawPhone.replace(/@lid$/, "");
+        try {
+          const { default: Contact } = await import("../models/Contact");
+          const { default: Ticket } = await import("../models/Ticket");
+          const { default: Message } = await import("../models/Message");
+          const { Op } = await import("sequelize");
+
+          const contact = await Contact.findOne({ where: { lid } });
+          if (contact) {
+            const ticket = await Ticket.findOne({
+              where: { contactId: contact.id },
+              order: [["updatedAt", "DESC"]]
+            });
+            if (ticket) {
+              const msg = await Message.findOne({
+                where: { ticketId: ticket.id, fromMe: true, ack: { [Op.lt]: ack } },
+                order: [["createdAt", "DESC"]]
+              });
+              if (msg && msg.id !== directId) {
+                await handleMessageAck(msg.id, ack);
+              }
+            }
+          }
+        } catch (err) {
+          logger.error({ msg: "MessageStatusCallback LID lookup error", err });
+        }
+      }
+
       return;
     }
 
@@ -141,9 +177,16 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
         ? phone
         : payload.senderName || phone;
 
+    // chatLid is the WhatsApp LID for this contact — stored so MessageStatusCallback
+    // can look up the contact when phone arrives in "255...@lid" format
+    const contactLid: string | undefined = !isGroup
+      ? (payload.chatLid || payload.participantLid || undefined)
+      : undefined;
+
     const contactPayload: ContactPayload = {
       name: senderName,
       number: phone,
+      lid: contactLid,
       profilePicUrl: payload.senderPhoto || payload.photo || undefined,
       isGroup: false
     };
