@@ -232,7 +232,7 @@ const LoggedInLayout = ({ children }) => {
             noWrap
             className={classes.title}
           >
-            WhaTicket
+            Multi atendimento Grupo Pelicano
           </Typography>
 
           <div className={classes.themeSwitchContainer}>
