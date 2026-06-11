@@ -243,13 +243,25 @@ const handleChatbotLogic = async (
 
     const input = (messageBody || "").trim();
     logger.info({ msg: "Chatbot: input received", input, ticketId: ticket.id });
-    const matched = chatbot.options.find(opt => opt.option === input);
+
+    // Match by option id (e.g. "1") OR by title (e.g. "Financeiro") — case insensitive
+    const matched = chatbot.options.find(opt => {
+      const optStr = String(opt.option || "").trim();
+      const titleStr = String(opt.title || "").trim();
+      const inputLower = input.toLowerCase();
+      return (
+        optStr === input ||
+        optStr.toLowerCase() === inputLower ||
+        titleStr.toLowerCase() === inputLower
+      );
+    });
 
     logger.info({
       msg: "Chatbot: matching",
       input,
-      expectedOptions: chatbot.options.map(o => o.option),
-      matched: matched ? matched.option : null
+      expectedOptions: chatbot.options.map(o => `${o.option}|${o.title}`),
+      matched: matched ? `${matched.option}|${matched.title}` : null,
+      matchedQueueId: matched?.queueId || null
     });
 
     if (matched && matched.queueId) {
@@ -258,28 +270,31 @@ const handleChatbotLogic = async (
         ticketId: ticket.id
       });
 
-      if (matched.queue?.greetingMessage) {
-        try {
-          const sentGreeting = await whatsappProvider.sendMessage(
-            whatsappId,
-            `${contactPayload.number}@c.us`,
-            `‎${matched.queue.greetingMessage}`
-          );
-          await CreateMessageService({
-            messageData: {
-              id: sentGreeting?.id || `chatbot-${Date.now()}`,
-              ticketId: ticket.id,
-              body: matched.queue.greetingMessage,
-              fromMe: true,
-              read: true,
-              mediaType: "chat",
-              ack: 1
-            }
-          });
-          await ticket.update({ lastMessage: matched.queue.greetingMessage });
-        } catch (err) {
-          logger.error("Chatbot: error sending queue greeting", err);
-        }
+      // Always send a confirmation — use greetingMessage if configured, otherwise default
+      const queueName = matched.queue?.name || "atendimento";
+      const greetMsg = matched.queue?.greetingMessage?.trim()
+        || `Você selecionou *${queueName}*.\n\nPor favor, aguarde um momento. Em breve um de nossos atendentes irá lhe atender. 😊`;
+
+      try {
+        const sentGreeting = await whatsappProvider.sendMessage(
+          whatsappId,
+          `${contactPayload.number}@c.us`,
+          `‎${greetMsg}`
+        );
+        await CreateMessageService({
+          messageData: {
+            id: sentGreeting?.id || `chatbot-${Date.now()}`,
+            ticketId: ticket.id,
+            body: greetMsg,
+            fromMe: true,
+            read: true,
+            mediaType: "chat",
+            ack: 1
+          }
+        });
+        await ticket.update({ lastMessage: greetMsg });
+      } catch (err) {
+        logger.error("Chatbot: error sending queue greeting", err);
       }
     } else {
       const optionsList = chatbot.options.map(opt => ({ option: opt.option, title: opt.title }));
@@ -476,6 +491,7 @@ export const handleMessage = async (
 
     if (
       !isGroupMessage &&
+      !ticket.queueId &&   // queueId is always populated even without eager-loading
       !ticket.queue &&
       !processedMessage.fromMe &&
       !ticket.userId
