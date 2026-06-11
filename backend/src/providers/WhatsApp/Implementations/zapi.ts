@@ -62,12 +62,13 @@ const zapiDelete = async (path: string, params?: Record<string, string | boolean
   });
 };
 
-// Remove @c.us / @g.us suffix; preserve dash for group IDs (e.g. 5511999999999-1234567890)
+// For groups (@g.us): strip only the suffix, keep full alphanumeric ID (e.g. "120363xxx-ABCdef")
+// For individuals (@c.us / @s.whatsapp.net): strip suffix and keep only digits
 const cleanPhone = (to: string): string => {
-  const withoutSuffix = to.replace(/@c\.us|@g\.us|@s\.whatsapp\.net/g, "");
-  return withoutSuffix.includes("-")
-    ? withoutSuffix.replace(/[^\d-]/g, "")
-    : withoutSuffix.replace(/[^\d]/g, "");
+  if (to.includes("@g.us")) {
+    return to.replace(/@g\.us$/, "");
+  }
+  return to.replace(/@c\.us|@s\.whatsapp\.net/g, "").replace(/[^\d]/g, "");
 };
 
 const removeSession = (whatsappId: number): void => {

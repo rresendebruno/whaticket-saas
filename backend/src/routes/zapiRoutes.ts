@@ -77,8 +77,8 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
 
     const isGroup = Boolean(payload.participantPhone);
     const groupRawPhone: string = isGroup ? payload.phone || "" : "";
-    // Group IDs in Z-API use the format "5511999999999-1234567890" — preserve the dash
-    const groupPhone = groupRawPhone.replace(/@.+$/, "").replace(/[^\d-]/g, "");
+    // Group IDs can be alphanumeric (e.g. "120363xxx-ABCdef") — only strip the @g.us suffix
+    const groupPhone = groupRawPhone.replace(/@.+$/, "");
 
     const contactPayload: ContactPayload = {
       name: payload.senderName || phone,
