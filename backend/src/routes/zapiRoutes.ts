@@ -67,8 +67,11 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
       return;
     }
 
-    // Ignore messages sent by us or non-message callbacks
-    if (payload.fromMe) return;
+    // Skip messages sent by our backend API (already saved by SendWhatsAppMessage)
+    // Allow messages sent directly from the physical phone (fromApi: false) to sync
+    if (payload.fromMe && payload.fromApi !== false) return;
+    // Group messages sent from phone have complex routing — skip for now
+    if (payload.fromMe && payload.isGroup) return;
     if (payload.type !== "ReceivedCallback") return;
 
     const rawPhone: string = payload.participantPhone || payload.phone || "";
@@ -100,8 +103,15 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
       body = payload.buttonReply.selectedButtonId || payload.buttonReply.selectedDisplayText || "";
       msgType = "chat";
     } else if (payload.listResponseMessage) {
-      // Option-list reply (/send-option-list) — Z-API uses listResponseMessage
-      body = payload.listResponseMessage.id || payload.listResponseMessage.title || "";
+      // Option-list reply (/send-option-list)
+      const lrm = payload.listResponseMessage;
+      logger.info({ msg: "Z-API listResponseMessage", content: lrm });
+      // Z-API may nest the selected ID under singleSelectReply.selectedRowId
+      body = lrm?.singleSelectReply?.selectedRowId
+        || lrm?.id
+        || lrm?.rowId
+        || lrm?.title
+        || "";
       msgType = "chat";
     } else if (payload.listReply) {
       // Legacy list reply format
@@ -156,7 +166,7 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
     const messagePayload: MessagePayload = {
       id: payload.messageId || `zapi-${Date.now()}`,
       body,
-      fromMe: false,
+      fromMe: Boolean(payload.fromMe),
       hasMedia,
       type: msgType,
       timestamp,

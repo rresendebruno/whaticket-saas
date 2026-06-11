@@ -145,17 +145,18 @@ const processVcardMessage = async (
   }
 };
 
-const zapiChatbotPost = async (path: string, body: object): Promise<void> => {
+const zapiChatbotPost = async (path: string, body: object): Promise<string> => {
   const id = process.env.ZAPI_INSTANCE_ID;
   const token = process.env.ZAPI_TOKEN;
   const clientToken = process.env.ZAPI_CLIENT_TOKEN || "";
-  if (!id || !token) return;
+  if (!id || !token) return "";
   const url = `https://api.z-api.io/instances/${id}/token/${token}${path}`;
   try {
     const { data } = await axios.post(url, body, {
       headers: { "Content-Type": "application/json", "Client-Token": clientToken }
     });
     logger.info({ msg: "zapiChatbotPost ok", path, response: data });
+    return data?.messageId || data?.id || `chatbot-${Date.now()}`;
   } catch (err: any) {
     logger.error({ msg: "zapiChatbotPost error", path, zapiError: err?.response?.data || err?.message });
     throw err;
@@ -165,12 +166,14 @@ const zapiChatbotPost = async (path: string, body: object): Promise<void> => {
 const sendChatbotMenu = async (
   phone: string,
   greetingMessage: string,
-  options: Array<{ option: string; title: string }>
+  options: Array<{ option: string; title: string }>,
+  ticket: Ticket
 ): Promise<void> => {
   const isZapi = (process.env.WHATSAPP_PROVIDER || "wwebjs") === "zapi";
+  let messageId = "";
 
   if (isZapi && options.length <= 3) {
-    await zapiChatbotPost("/send-button-actions", {
+    messageId = await zapiChatbotPost("/send-button-actions", {
       phone,
       message: greetingMessage,
       buttonActions: options.map(opt => ({
@@ -179,11 +182,8 @@ const sendChatbotMenu = async (
         label: opt.title
       }))
     });
-    return;
-  }
-
-  if (isZapi && options.length <= 10) {
-    await zapiChatbotPost("/send-option-list", {
+  } else if (isZapi && options.length <= 10) {
+    messageId = await zapiChatbotPost("/send-option-list", {
       phone,
       message: greetingMessage,
       optionList: {
@@ -192,14 +192,34 @@ const sendChatbotMenu = async (
         options: options.map(opt => ({ id: opt.option, title: opt.title, description: "" }))
       }
     });
-    return;
+  } else {
+    // Fallback: numbered text
+    let optionsList = "";
+    options.forEach(opt => { optionsList += `*${opt.option}* - ${opt.title}\n`; });
+    const body = greetingMessage ? `${greetingMessage}\n\n${optionsList}` : optionsList;
+    const sent = await whatsappProvider.sendMessage(0, `${phone}@c.us`, `‎${body}`);
+    messageId = sent?.id || `chatbot-${Date.now()}`;
   }
 
-  // Fallback: numbered text
-  let optionsList = "";
-  options.forEach(opt => { optionsList += `*${opt.option}* - ${opt.title}\n`; });
-  const body = greetingMessage ? `${greetingMessage}\n\n${optionsList}` : optionsList;
-  await whatsappProvider.sendMessage(0, `${phone}@c.us`, `‎${body}`);
+  // Save chatbot menu message to DB so it appears in the conversation
+  if (messageId) {
+    try {
+      await CreateMessageService({
+        messageData: {
+          id: messageId,
+          ticketId: ticket.id,
+          body: greetingMessage,
+          fromMe: true,
+          read: true,
+          mediaType: "chat",
+          ack: 1
+        }
+      });
+      await ticket.update({ lastMessage: greetingMessage });
+    } catch (err) {
+      logger.error({ msg: "Chatbot: error saving menu message to DB", err });
+    }
+  }
 };
 
 const handleChatbotLogic = async (
@@ -225,6 +245,13 @@ const handleChatbotLogic = async (
     logger.info({ msg: "Chatbot: input received", input, ticketId: ticket.id });
     const matched = chatbot.options.find(opt => opt.option === input);
 
+    logger.info({
+      msg: "Chatbot: matching",
+      input,
+      expectedOptions: chatbot.options.map(o => o.option),
+      matched: matched ? matched.option : null
+    });
+
     if (matched && matched.queueId) {
       await UpdateTicketService({
         ticketData: { queueId: matched.queueId, status: "pending" },
@@ -233,11 +260,23 @@ const handleChatbotLogic = async (
 
       if (matched.queue?.greetingMessage) {
         try {
-          await whatsappProvider.sendMessage(
+          const sentGreeting = await whatsappProvider.sendMessage(
             whatsappId,
             `${contactPayload.number}@c.us`,
             `‎${matched.queue.greetingMessage}`
           );
+          await CreateMessageService({
+            messageData: {
+              id: sentGreeting?.id || `chatbot-${Date.now()}`,
+              ticketId: ticket.id,
+              body: matched.queue.greetingMessage,
+              fromMe: true,
+              read: true,
+              mediaType: "chat",
+              ack: 1
+            }
+          });
+          await ticket.update({ lastMessage: matched.queue.greetingMessage });
         } catch (err) {
           logger.error("Chatbot: error sending queue greeting", err);
         }
@@ -249,7 +288,7 @@ const handleChatbotLogic = async (
       const debouncedSend = debounce(
         async () => {
           try {
-            await sendChatbotMenu(contactPayload.number, greeting, optionsList);
+            await sendChatbotMenu(contactPayload.number, greeting, optionsList, ticket);
           } catch (err) {
             logger.error("Chatbot: error sending menu", err);
           }
