@@ -97,7 +97,8 @@ const TicketsManager = () => {
   const visibleQueues = (user.queues || []).filter(q => !q.isGroupQueue);
   const groupQueueIds = (user.queues || []).filter(q => q.isGroupQueue).map(q => q.id);
   const userQueueIds = visibleQueues.map((q) => q.id);
-  const [selectedQueueIds, setSelectedQueueIds] = useState(userQueueIds || []);
+  // Group queue IDs are always included so their tickets appear without UI chips
+  const [selectedQueueIds, setSelectedQueueIds] = useState([...userQueueIds, ...groupQueueIds]);
 
   useEffect(() => {
     if (user.profile.toUpperCase() === "ADMIN") {
@@ -228,7 +229,7 @@ const TicketsManager = () => {
           style={{ marginLeft: 6 }}
           selectedQueueIds={selectedQueueIds}
           userQueues={visibleQueues}
-          onChange={(values) => setSelectedQueueIds(values)}
+          onChange={(values) => setSelectedQueueIds([...values, ...groupQueueIds])}
         />
       </Paper>
       <TabPanel value={tab} name="open" className={classes.ticketsWrapper}>
@@ -268,13 +269,13 @@ const TicketsManager = () => {
           <TicketsList
             status="open"
             showAll={showAllTickets}
-            selectedQueueIds={[...selectedQueueIds, ...groupQueueIds]}
+            selectedQueueIds={selectedQueueIds}
             updateCount={(val) => setOpenCount(val)}
             style={applyPanelStyle("open")}
           />
           <TicketsList
             status="pending"
-            selectedQueueIds={[...selectedQueueIds, ...groupQueueIds]}
+            selectedQueueIds={selectedQueueIds}
             updateCount={(val) => setPendingCount(val)}
             style={applyPanelStyle("pending")}
           />
@@ -284,14 +285,14 @@ const TicketsManager = () => {
         <TicketsList
           status="closed"
           showAll={true}
-          selectedQueueIds={[...selectedQueueIds, ...groupQueueIds]}
+          selectedQueueIds={selectedQueueIds}
         />
       </TabPanel>
       <TabPanel value={tab} name="search" className={classes.ticketsWrapper}>
         <TicketsList
           searchParam={searchParam}
           showAll={true}
-          selectedQueueIds={[...selectedQueueIds, ...groupQueueIds]}
+          selectedQueueIds={selectedQueueIds}
         />
       </TabPanel>
     </Paper>
