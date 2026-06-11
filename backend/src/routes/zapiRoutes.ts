@@ -50,6 +50,9 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
   res.status(200).json({ ok: true });
 
   try {
+    // Debug: log all incoming webhook payloads (remove after diagnosis)
+    logger.info({ msg: "Z-API webhook received", type: payload.type, fromMe: payload.fromMe, hasButtonReply: !!payload.buttonReply, hasListReply: !!payload.listReply, hasText: !!payload.text, phone: payload.phone });
+
     // Handle message revoke (client deleted their own message)
     if (payload.isRevoked === true || payload.type === "REVOKE") {
       const revokedId: string = payload.messageId || payload.id || "";
