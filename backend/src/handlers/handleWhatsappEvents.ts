@@ -170,12 +170,14 @@ const sendChatbotMenu = async (
   const isZapi = (process.env.WHATSAPP_PROVIDER || "wwebjs") === "zapi";
 
   if (isZapi && options.length <= 3) {
-    await zapiChatbotPost("/send-button-list", {
+    await zapiChatbotPost("/send-button-actions", {
       phone,
       message: greetingMessage,
-      buttonList: {
-        buttons: options.map(opt => ({ id: opt.option, label: opt.title }))
-      }
+      buttonActions: options.map(opt => ({
+        id: opt.option,
+        type: "REPLY",
+        label: opt.title
+      }))
     });
     return;
   }
