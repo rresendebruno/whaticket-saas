@@ -9,12 +9,13 @@ import Whatsapp from "../models/Whatsapp";
 import { getIO } from "../libs/socket";
 import {
   handleMessage,
+  handleMessageAck,
   ContactPayload,
   MessagePayload,
   MediaPayload,
   WhatsappContextPayload
 } from "../handlers/handleWhatsappEvents";
-import { MessageType } from "../providers/WhatsApp/types";
+import { MessageType, MessageAck } from "../providers/WhatsApp/types";
 
 const router = Router();
 const writeFileAsync = promisify(writeFile);
@@ -63,6 +64,24 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
             .to(msg.ticketId.toString())
             .emit("appMessage", { action: "update", message: msg });
         }
+      }
+      return;
+    }
+
+    // Message delivery / read ACK callbacks — update tick status in WhaTicket
+    // SentCallback=1(✓), DeliveredCallback=2(✓✓ grey), ReadCallback=3(✓✓ blue)
+    if (
+      payload.type === "DeliveredCallback" ||
+      payload.type === "ReadCallback" ||
+      payload.type === "SentCallback"
+    ) {
+      const msgId: string = payload.messageId || payload.id || "";
+      if (msgId) {
+        const ack: MessageAck =
+          payload.type === "ReadCallback" ? 3
+          : payload.type === "DeliveredCallback" ? 2
+          : 1;
+        await handleMessageAck(msgId, ack);
       }
       return;
     }

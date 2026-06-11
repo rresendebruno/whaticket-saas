@@ -99,11 +99,21 @@ const init = async (whatsapp: Whatsapp): Promise<void> => {
 
     try {
       await zapiPut("/update-webhook-received", { value: msgWebhook });
+      // ACK callbacks (SentCallback, DeliveredCallback, ReadCallback) use the same endpoint
+      await zapiPut("/update-webhook-message-ack", { value: msgWebhook });
       await zapiPut("/update-webhook-disconnected", { value: statusWebhook });
       await zapiPut("/update-webhook-status", { value: statusWebhook });
       logger.info(`Z-API webhooks set: ${msgWebhook}`);
     } catch (err) {
       logger.warn({ msg: "Could not set Z-API webhooks", err });
+    }
+
+    // Ensure read receipts are enabled in WhatsApp privacy settings
+    try {
+      await zapiPost("/privacy/read-receipts", {});
+      logger.info("Z-API read receipts privacy: enabled");
+    } catch (err) {
+      logger.warn({ msg: "Could not enable Z-API read-receipts privacy setting", err });
     }
 
     // Check current connection status
