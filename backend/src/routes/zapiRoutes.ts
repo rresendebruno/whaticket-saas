@@ -52,14 +52,20 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
 
   try {
     // Diagnostic: log every webhook so we can see what Z-API sends for ACK
-    logger.info({
-      msg: "Z-API webhook IN",
-      type: payload.type,
-      fromMe: payload.fromMe,
-      fromApi: payload.fromApi,
-      status: payload.status,
-      msgId: payload.messageId
-    });
+    if (payload.type === "MessageStatusCallback") {
+      // Log full payload (minus large body fields) to find the messageId field name
+      const { text: _t, image: _i, audio: _a, video: _v, document: _d, ...meta } = payload;
+      logger.info({ msg: "Z-API MessageStatusCallback full", ...meta });
+    } else {
+      logger.info({
+        msg: "Z-API webhook IN",
+        type: payload.type,
+        fromMe: payload.fromMe,
+        fromApi: payload.fromApi,
+        status: payload.status,
+        msgId: payload.messageId
+      });
+    }
 
     // Handle message revoke (client deleted their own message)
     if (payload.isRevoked === true || payload.type === "REVOKE") {
@@ -78,30 +84,26 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
       return;
     }
 
-    // Message delivery / read ACK callbacks — update tick status in WhaTicket
-    // Pattern A: explicit callback types (some Z-API versions)
-    // SentCallback=1(✓), DeliveredCallback=2(✓✓ grey), ReadCallback=3(✓✓ blue)
-    if (
-      payload.type === "DeliveredCallback" ||
-      payload.type === "ReadCallback" ||
-      payload.type === "SentCallback" ||
-      payload.type === "MessageDeliveredCallback" ||
-      payload.type === "MessageReadCallback" ||
-      payload.type === "MessageSentCallback"
-    ) {
-      const msgId: string = payload.messageId || payload.id || "";
-      if (msgId) {
-        const t = payload.type;
-        const ack: MessageAck =
-          t === "ReadCallback" || t === "MessageReadCallback" ? 3
-          : t === "DeliveredCallback" || t === "MessageDeliveredCallback" ? 2
-          : 1;
+    // MessageStatusCallback: Z-API's actual type for SENT/RECEIVED/READ ACK
+    // RECEIVED = delivered to device (✓✓ grey), READ = read by recipient (✓✓ blue)
+    if (payload.type === "MessageStatusCallback") {
+      const msgId: string =
+        payload.messageId || payload.id || payload.referenceId || payload.zaapId || "";
+      const s = String(payload.status || "").toUpperCase();
+      const ackByStatus: Record<string, MessageAck> = {
+        SENT: 1,
+        RECEIVED: 2,   // delivered to recipient device
+        READ: 3        // read by recipient
+        // READ_BY_ME = we read their message — not a tick update on our sent messages
+      };
+      const ack = ackByStatus[s];
+      if (ack !== undefined && msgId) {
         await handleMessageAck(msgId, ack);
       }
       return;
     }
 
-    // Pattern B: Z-API sends fromMe:true with a 'status' field for ACK updates
+    // Pattern B: ReceivedCallback fromMe:true with status field (fallback)
     if (payload.fromMe && payload.messageId && payload.status) {
       const s = String(payload.status).toUpperCase();
       const ackByStatus: Record<string, MessageAck> = {
