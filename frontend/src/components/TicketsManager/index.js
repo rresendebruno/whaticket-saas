@@ -95,6 +95,7 @@ const TicketsManager = () => {
   const [openCount, setOpenCount] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
   const visibleQueues = (user.queues || []).filter(q => !q.isGroupQueue);
+  const groupQueueIds = (user.queues || []).filter(q => q.isGroupQueue).map(q => q.id);
   const userQueueIds = visibleQueues.map((q) => q.id);
   const [selectedQueueIds, setSelectedQueueIds] = useState(userQueueIds || []);
 
@@ -267,13 +268,13 @@ const TicketsManager = () => {
           <TicketsList
             status="open"
             showAll={showAllTickets}
-            selectedQueueIds={selectedQueueIds}
+            selectedQueueIds={[...selectedQueueIds, ...groupQueueIds]}
             updateCount={(val) => setOpenCount(val)}
             style={applyPanelStyle("open")}
           />
           <TicketsList
             status="pending"
-            selectedQueueIds={selectedQueueIds}
+            selectedQueueIds={[...selectedQueueIds, ...groupQueueIds]}
             updateCount={(val) => setPendingCount(val)}
             style={applyPanelStyle("pending")}
           />
@@ -283,14 +284,14 @@ const TicketsManager = () => {
         <TicketsList
           status="closed"
           showAll={true}
-          selectedQueueIds={selectedQueueIds}
+          selectedQueueIds={[...selectedQueueIds, ...groupQueueIds]}
         />
       </TabPanel>
       <TabPanel value={tab} name="search" className={classes.ticketsWrapper}>
         <TicketsList
           searchParam={searchParam}
           showAll={true}
-          selectedQueueIds={selectedQueueIds}
+          selectedQueueIds={[...selectedQueueIds, ...groupQueueIds]}
         />
       </TabPanel>
     </Paper>
