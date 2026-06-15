@@ -380,7 +380,7 @@ const messages = {
           },
         },
       },
-      acceptTicketWithQueueModal: {
+      newTicketWithQueueModal: {
         title: "Selecione a fila para iniciar o atendimento",
         queueLabel: "Fila",
         buttons: {

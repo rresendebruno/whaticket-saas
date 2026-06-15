@@ -22,7 +22,7 @@ const useStyles = makeStyles(() => ({
   },
 }));
 
-const AcceptTicketWithQueueModal = ({ open, onClose, onConfirm, loading }) => {
+const NewTicketWithQueueModal = ({ open, onClose, onConfirm, loading }) => {
   const classes = useStyles();
   const { user } = useContext(AuthContext);
   const [selectedQueueId, setSelectedQueueId] = useState("");
@@ -42,15 +42,15 @@ const AcceptTicketWithQueueModal = ({ open, onClose, onConfirm, loading }) => {
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
       <DialogTitle>
-        {i18n.t("acceptTicketWithQueueModal.title")}
+        {i18n.t("newTicketWithQueueModal.title")}
       </DialogTitle>
       <DialogContent dividers>
         <FormControl variant="outlined" className={classes.formControl} fullWidth>
-          <InputLabel>{i18n.t("acceptTicketWithQueueModal.queueLabel")}</InputLabel>
+          <InputLabel>{i18n.t("newTicketWithQueueModal.queueLabel")}</InputLabel>
           <Select
             value={selectedQueueId}
             onChange={e => setSelectedQueueId(e.target.value)}
-            label={i18n.t("acceptTicketWithQueueModal.queueLabel")}
+            label={i18n.t("newTicketWithQueueModal.queueLabel")}
           >
             {visibleQueues.map(queue => (
               <MenuItem key={queue.id} value={queue.id}>
@@ -62,7 +62,7 @@ const AcceptTicketWithQueueModal = ({ open, onClose, onConfirm, loading }) => {
       </DialogContent>
       <DialogActions>
         <Button onClick={handleClose} color="default" disabled={loading}>
-          {i18n.t("acceptTicketWithQueueModal.buttons.cancel")}
+          {i18n.t("newTicketWithQueueModal.buttons.cancel")}
         </Button>
         <Button
           onClick={handleConfirm}
@@ -70,11 +70,11 @@ const AcceptTicketWithQueueModal = ({ open, onClose, onConfirm, loading }) => {
           variant="contained"
           disabled={!selectedQueueId || loading}
         >
-          {i18n.t("acceptTicketWithQueueModal.buttons.confirm")}
+          {i18n.t("newTicketWithQueueModal.buttons.confirm")}
         </Button>
       </DialogActions>
     </Dialog>
   );
 };
 
-export default AcceptTicketWithQueueModal;
+export default NewTicketWithQueueModal;

@@ -376,7 +376,7 @@ const messages = {
           },
         },
       },
-      acceptTicketWithQueueModal: {
+      newTicketWithQueueModal: {
         title: "Select a queue to start the service",
         queueLabel: "Queue",
         buttons: {

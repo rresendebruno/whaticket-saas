@@ -25,6 +25,7 @@ import api from "../../services/api";
 import TableRowSkeleton from "../../components/TableRowSkeleton";
 import ContactModal from "../../components/ContactModal";
 import ConfirmationModal from "../../components/ConfirmationModal/";
+import NewTicketWithQueueModal from "../../components/AcceptTicketWithQueueModal";
 
 import { i18n } from "../../translate/i18n";
 import MainHeader from "../../components/MainHeader";
@@ -103,6 +104,8 @@ const Contacts = () => {
   const [deletingContact, setDeletingContact] = useState(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [hasMore, setHasMore] = useState(false);
+  const [newTicketModalOpen, setNewTicketModalOpen] = useState(false);
+  const [pendingNewTicketContactId, setPendingNewTicketContactId] = useState(null);
 
   useEffect(() => {
     dispatch({ type: "RESET" });
@@ -161,15 +164,23 @@ const Contacts = () => {
     setContactModalOpen(false);
   };
 
-  const handleSaveTicket = async (contactId) => {
-    if (!contactId) return;
+  const handleOpenNewTicketModal = (contactId) => {
+    setPendingNewTicketContactId(contactId);
+    setNewTicketModalOpen(true);
+  };
+
+  const handleCreateTicketWithQueue = async (queueId) => {
+    if (!pendingNewTicketContactId) return;
     setLoading(true);
     try {
       const { data: ticket } = await api.post("/tickets", {
-        contactId: contactId,
+        contactId: pendingNewTicketContactId,
         userId: user?.id,
         status: "open",
+        queueId,
       });
+      setNewTicketModalOpen(false);
+      setPendingNewTicketContactId(null);
       history.push(`/tickets/${ticket.id}`);
     } catch (err) {
       toastError(err);
@@ -217,6 +228,15 @@ const Contacts = () => {
 
   return (
     <MainContainer className={classes.mainContainer}>
+      <NewTicketWithQueueModal
+        open={newTicketModalOpen}
+        onClose={() => {
+          setNewTicketModalOpen(false);
+          setPendingNewTicketContactId(null);
+        }}
+        onConfirm={handleCreateTicketWithQueue}
+        loading={loading}
+      />
       <ContactModal
         open={contactModalOpen}
         onClose={handleCloseContactModal}
@@ -311,7 +331,7 @@ const Contacts = () => {
                   <TableCell align="center">
                     <IconButton
                       size="small"
-                      onClick={() => handleSaveTicket(contact.id)}
+                      onClick={() => handleOpenNewTicketModal(contact.id)}
                     >
                       <WhatsAppIcon />
                     </IconButton>

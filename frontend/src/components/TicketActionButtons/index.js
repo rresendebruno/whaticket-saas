@@ -9,7 +9,6 @@ import { i18n } from "../../translate/i18n";
 import api from "../../services/api";
 import TicketOptionsMenu from "../TicketOptionsMenu";
 import ButtonWithSpinner from "../ButtonWithSpinner";
-import AcceptTicketWithQueueModal from "../AcceptTicketWithQueueModal";
 import toastError from "../../errors/toastError";
 import { AuthContext } from "../../context/Auth/AuthContext";
 
@@ -30,7 +29,6 @@ const TicketActionButtons = ({ ticket }) => {
 	const history = useHistory();
 	const [anchorEl, setAnchorEl] = useState(null);
 	const [loading, setLoading] = useState(false);
-	const [acceptModalOpen, setAcceptModalOpen] = useState(false);
 	const ticketOptionsMenuOpen = Boolean(anchorEl);
 	const { user } = useContext(AuthContext);
 
@@ -42,13 +40,12 @@ const TicketActionButtons = ({ ticket }) => {
 		setAnchorEl(null);
 	};
 
-	const handleUpdateTicketStatus = async (e, status, userId, queueId) => {
+	const handleUpdateTicketStatus = async (e, status, userId) => {
 		setLoading(true);
 		try {
 			await api.put(`/tickets/${ticket.id}`, {
 				status: status,
 				userId: userId || null,
-				...(queueId !== undefined && { queueId }),
 			});
 
 			setLoading(false);
@@ -63,19 +60,8 @@ const TicketActionButtons = ({ ticket }) => {
 		}
 	};
 
-	const handleAcceptWithQueue = async (queueId) => {
-		await handleUpdateTicketStatus(null, "open", user?.id, queueId);
-		setAcceptModalOpen(false);
-	};
-
 	return (
 		<div className={classes.actionButtons}>
-			<AcceptTicketWithQueueModal
-				open={acceptModalOpen}
-				onClose={() => setAcceptModalOpen(false)}
-				onConfirm={handleAcceptWithQueue}
-				loading={loading}
-			/>
 			{ticket.status === "closed" && (
 				<ButtonWithSpinner
 					loading={loading}
@@ -122,7 +108,7 @@ const TicketActionButtons = ({ ticket }) => {
 					size="small"
 					variant="contained"
 					color="primary"
-					onClick={() => setAcceptModalOpen(true)}
+					onClick={e => handleUpdateTicketStatus(e, "open", user?.id)}
 				>
 					{i18n.t("messagesList.header.buttons.accept")}
 				</ButtonWithSpinner>

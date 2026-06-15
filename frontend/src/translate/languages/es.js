@@ -381,7 +381,7 @@ const messages = {
           },
         },
       },
-      acceptTicketWithQueueModal: {
+      newTicketWithQueueModal: {
         title: "Seleccione una cola para iniciar el servicio",
         queueLabel: "Cola",
         buttons: {
