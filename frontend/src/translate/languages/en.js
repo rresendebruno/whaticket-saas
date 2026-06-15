@@ -370,6 +370,10 @@ const messages = {
               disabled: "Disabled",
             },
           },
+          autoResolveTimeout: {
+            name: "Auto-resolve inactive conversations after (hours)",
+            helper: "Set to 0 to disable. Conversations with no activity for the specified time will be automatically resolved.",
+          },
         },
       },
       messagesList: {

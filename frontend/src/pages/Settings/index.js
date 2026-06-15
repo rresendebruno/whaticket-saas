@@ -87,9 +87,9 @@ const Settings = () => {
 		}
 	};
 
-	const getSettingValue = key => {
-		const { value } = settings.find(s => s.key === key);
-		return value;
+	const getSettingValue = (key, fallback = "") => {
+		const found = settings.find(s => s.key === key);
+		return found ? found.value : fallback;
 	};
 
 	return (
@@ -133,6 +133,24 @@ const Settings = () => {
 						variant="outlined"
 						fullWidth
 						value={settings && settings.length > 0 && getSettingValue("userApiToken")}
+					/>
+				</Paper>
+
+				<Paper className={classes.paper}>
+					<Typography variant="body1">
+						{i18n.t("settings.settings.autoResolveTimeout.name")}
+					</Typography>
+					<TextField
+						id="autoResolveTimeout-setting"
+						name="autoResolveTimeout"
+						margin="dense"
+						variant="outlined"
+						type="number"
+						inputProps={{ min: 0, style: { width: 80, textAlign: "center" } }}
+						className={classes.settingOption}
+						value={settings && settings.length > 0 && getSettingValue("autoResolveTimeout")}
+						onChange={handleChangeSetting}
+						helperText={i18n.t("settings.settings.autoResolveTimeout.helper")}
 					/>
 				</Paper>
 

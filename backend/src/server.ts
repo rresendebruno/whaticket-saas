@@ -4,6 +4,7 @@ import { initIO } from "./libs/socket";
 import { logger } from "./utils/logger";
 import { initRedis } from "./libs/redisStore";
 import { StartAllWhatsAppsSessions } from "./services/WbotServices/StartAllWhatsAppsSessions";
+import AutoResolveTicketsService from "./services/TicketServices/AutoResolveTicketsService";
 
 const server = app.listen(process.env.PORT, () => {
   logger.info(`Server started on port: ${process.env.PORT}`);
@@ -13,6 +14,15 @@ initIO(server);
 initRedis();
 StartAllWhatsAppsSessions();
 gracefulShutdown(server);
+
+// Run auto-resolve check every 15 minutes
+setInterval(async () => {
+  try {
+    await AutoResolveTicketsService();
+  } catch (err) {
+    logger.error({ msg: "AutoResolve scheduler error", err });
+  }
+}, 15 * 60 * 1000);
 
 process.on("uncaughtException", err => {
   logger.error({ info: "Global uncaught exception", err });

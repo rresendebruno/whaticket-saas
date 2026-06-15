@@ -374,6 +374,10 @@ const messages = {
               disabled: "Desativado",
             },
           },
+          autoResolveTimeout: {
+            name: "Resolver automaticamente conversas inativas após (horas)",
+            helper: "Digite 0 para desativar. Conversas sem interação pelo tempo definido serão resolvidas automaticamente.",
+          },
         },
       },
       messagesList: {
