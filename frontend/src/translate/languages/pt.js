@@ -380,6 +380,14 @@ const messages = {
           },
         },
       },
+      acceptTicketWithQueueModal: {
+        title: "Selecione a fila para iniciar o atendimento",
+        queueLabel: "Fila",
+        buttons: {
+          cancel: "Cancelar",
+          confirm: "Iniciar atendimento",
+        },
+      },
       messagesList: {
         header: {
           assignedTo: "Atribuído à:",

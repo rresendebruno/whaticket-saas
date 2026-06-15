@@ -376,6 +376,14 @@ const messages = {
           },
         },
       },
+      acceptTicketWithQueueModal: {
+        title: "Select a queue to start the service",
+        queueLabel: "Queue",
+        buttons: {
+          cancel: "Cancel",
+          confirm: "Start service",
+        },
+      },
       messagesList: {
         header: {
           assignedTo: "Assigned to:",

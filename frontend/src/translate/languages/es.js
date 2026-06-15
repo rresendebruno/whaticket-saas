@@ -381,6 +381,14 @@ const messages = {
           },
         },
       },
+      acceptTicketWithQueueModal: {
+        title: "Seleccione una cola para iniciar el servicio",
+        queueLabel: "Cola",
+        buttons: {
+          cancel: "Cancelar",
+          confirm: "Iniciar servicio",
+        },
+      },
       messagesList: {
         header: {
           assignedTo: "Asignado a:",
