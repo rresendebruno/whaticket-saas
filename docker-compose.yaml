@@ -2,6 +2,8 @@ version: '3'
 
 networks:
   whaticket:
+  traefik-network:
+    external: true
 
 services:
 
@@ -33,6 +35,18 @@ services:
       - ./backend/.wwebjs_auth/:/usr/src/app/.wwebjs_auth/
     networks:
       - whaticket
+      - traefik-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-network"
+      - "traefik.http.routers.whaticket-backend.rule=Host(`api.cloudconnectivity.com.br`)"
+      - "traefik.http.routers.whaticket-backend.entrypoints=websecure"
+      - "traefik.http.routers.whaticket-backend.tls=true"
+      - "traefik.http.routers.whaticket-backend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.whaticket-backend.loadbalancer.server.port=3000"
+      - "traefik.http.routers.whaticket-backend-http.rule=Host(`api.cloudconnectivity.com.br`)"
+      - "traefik.http.routers.whaticket-backend-http.entrypoints=web"
+      - "traefik.http.routers.whaticket-backend-http.middlewares=redirect-https@docker"
     restart: always
     depends_on:
       - mysql
@@ -54,6 +68,20 @@ services:
       - ./ssl/www/:/var/www/letsencrypt/
     networks:
       - whaticket
+      - traefik-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-network"
+      - "traefik.http.routers.whaticket-frontend.rule=Host(`chat.cloudconnectivity.com.br`)"
+      - "traefik.http.routers.whaticket-frontend.entrypoints=websecure"
+      - "traefik.http.routers.whaticket-frontend.tls=true"
+      - "traefik.http.routers.whaticket-frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.whaticket-frontend.loadbalancer.server.port=80"
+      - "traefik.http.routers.whaticket-frontend-http.rule=Host(`chat.cloudconnectivity.com.br`)"
+      - "traefik.http.routers.whaticket-frontend-http.entrypoints=web"
+      - "traefik.http.routers.whaticket-frontend-http.middlewares=redirect-https@docker"
+      - "traefik.http.middlewares.redirect-https.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.redirect-https.redirectscheme.permanent=true"
     restart: always
     depends_on:
       - backend
