@@ -83,7 +83,8 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
   const profilePicUrl = await GetProfilePicUrl(validNumber);
 
   let name = newContact.name;
-  let number = validNumber;
+  // checkNumber returns "number@c.us" — strip suffix before storing
+  let number = String(validNumber || newContact.number).replace(/@c\.us$/, "");
   let email = newContact.email;
   let extraInfo = newContact.extraInfo;
 
