@@ -33,7 +33,7 @@ const useStyles = makeStyles(theme => ({
 	ticketsListHeader: {
 		color: "rgb(67, 83, 105)",
 		zIndex: 2,
-		backgroundColor: "white",
+		backgroundColor: theme.palette.background.paper,
 		borderBottom: "1px solid rgba(0, 0, 0, 0.12)",
 		display: "flex",
 		alignItems: "center",
