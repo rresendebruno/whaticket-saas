@@ -2,6 +2,7 @@ import { getIO } from "../../libs/socket";
 import Contact from "../../models/Contact";
 import Ticket from "../../models/Ticket";
 import { logger } from "../../utils/logger";
+import normalizeBrazilianPhone from "../../helpers/normalizeBrazilianPhone";
 
 interface ExtraInfo {
   name: string;
@@ -33,7 +34,8 @@ const CreateOrUpdateContactService = async ({
   email = "",
   extraInfo = []
 }: Request): Promise<Contact> => {
-  const number = isGroup ? rawNumber : rawNumber.replace(/[^0-9]/g, "");
+  const digitsOnly = isGroup ? rawNumber : rawNumber.replace(/[^0-9]/g, "");
+  const number = isGroup ? digitsOnly : normalizeBrazilianPhone(digitsOnly);
   if (!number && !lid) throw new Error("Either number or lid must be provided");
 
   const [contactByNumber, contactByLid] = await Promise.all([

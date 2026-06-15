@@ -7,6 +7,7 @@ import { writeFile } from "fs";
 import { logger } from "../utils/logger";
 import Whatsapp from "../models/Whatsapp";
 import { getIO } from "../libs/socket";
+import normalizeBrazilianPhone from "../helpers/normalizeBrazilianPhone";
 import {
   handleMessage,
   handleMessageAck,
@@ -165,7 +166,7 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
     if (payload.isNewsletter === true) return;
 
     const rawPhone: string = payload.participantPhone || payload.phone || "";
-    const phone = rawPhone.replace(/\D/g, "");
+    const phone = normalizeBrazilianPhone(rawPhone.replace(/\D/g, ""));
     if (!phone) return;
 
     const isGroup = Boolean(payload.participantPhone);
