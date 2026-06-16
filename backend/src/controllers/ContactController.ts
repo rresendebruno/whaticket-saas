@@ -118,24 +118,27 @@ export const update = async (
   res: Response
 ): Promise<Response> => {
   const contactData: ContactData = req.body;
-
-  const schema = Yup.object().shape({
-    name: Yup.string(),
-    number: Yup.string().matches(
-      /^\d+$/,
-      "Invalid number format. Only numbers is allowed."
-    )
-  });
-
-  try {
-    await schema.validate(contactData);
-  } catch (err) {
-    throw new AppError(err.message);
-  }
-
-  await CheckIsValidContact(contactData.number);
-
   const { contactId } = req.params;
+
+  const existing = await ShowContactService(contactId);
+
+  if (!existing.isGroup) {
+    const schema = Yup.object().shape({
+      name: Yup.string(),
+      number: Yup.string().matches(
+        /^\d+$/,
+        "Invalid number format. Only numbers is allowed."
+      )
+    });
+
+    try {
+      await schema.validate(contactData);
+    } catch (err) {
+      throw new AppError(err.message);
+    }
+
+    await CheckIsValidContact(contactData.number);
+  }
 
   const contact = await UpdateContactService({ contactData, contactId });
 

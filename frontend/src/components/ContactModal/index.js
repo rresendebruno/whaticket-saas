@@ -69,6 +69,7 @@ const ContactModal = ({ open, onClose, contactId, initialValues, onSave }) => {
 		name: "",
 		number: "",
 		email: "",
+		isGroup: false,
 	};
 
 	const [contact, setContact] = useState(initialState);
@@ -170,6 +171,7 @@ const ContactModal = ({ open, onClose, contactId, initialValues, onSave }) => {
 									placeholder="5513912344321"
 									variant="outlined"
 									margin="dense"
+									disabled={values.isGroup}
 								/>
 								<div>
 									<Field
