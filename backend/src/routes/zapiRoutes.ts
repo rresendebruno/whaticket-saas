@@ -271,12 +271,29 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
       body = `https://maps.google.com/maps?q=${lat},${lng}`;
       msgType = "location";
     } else if (payload.contact?.vcard) {
-      // Single contact card forwarded by the user
+      // Single contact card with full vCard string
       body = payload.contact.vcard;
+      msgType = "vcard";
+    } else if (payload.contactName && payload.contactPhone) {
+      // Z-API simple format: contactName + contactPhone (mirrors send-contact API)
+      const phone_ = String(payload.contactPhone).replace(/\D/g, "");
+      const intl = phone_.startsWith("+") ? phone_ : `+${phone_}`;
+      body = `BEGIN:VCARD\nVERSION:3.0\nFN:${payload.contactName}\nTEL;type=CELL;waid=${phone_}:${intl}\nEND:VCARD`;
       msgType = "vcard";
     } else if (Array.isArray(payload.contacts) && payload.contacts.length > 0) {
       // Multiple contact cards — join vcards so the frontend can render them
-      body = payload.contacts.map((c: any) => c.vcard).filter(Boolean).join("\n");
+      body = payload.contacts
+        .map((c: any) => {
+          if (c.vcard) return c.vcard;
+          if (c.displayName && c.phones?.[0]) {
+            const p = String(c.phones[0]).replace(/\D/g, "");
+            return `BEGIN:VCARD\nVERSION:3.0\nFN:${c.displayName}\nTEL;type=CELL;waid=${p}:+${p}\nEND:VCARD`;
+          }
+          return null;
+        })
+        .filter(Boolean)
+        .join("\n");
+      if (!body) return;
       msgType = "vcard";
     } else {
       // Unknown type — skip
