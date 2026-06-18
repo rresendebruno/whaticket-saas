@@ -270,6 +270,14 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
       const lng = payload.location.longitude;
       body = `https://maps.google.com/maps?q=${lat},${lng}`;
       msgType = "location";
+    } else if (payload.contact?.vcard) {
+      // Single contact card forwarded by the user
+      body = payload.contact.vcard;
+      msgType = "vcard";
+    } else if (Array.isArray(payload.contacts) && payload.contacts.length > 0) {
+      // Multiple contact cards — join vcards so the frontend can render them
+      body = payload.contacts.map((c: any) => c.vcard).filter(Boolean).join("\n");
+      msgType = "vcard";
     } else {
       // Unknown type — skip
       return;
