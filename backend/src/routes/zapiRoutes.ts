@@ -296,7 +296,8 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
       if (!body) return;
       msgType = "vcard";
     } else {
-      // Unknown type — skip
+      // Unknown type — log full payload so we can identify the format
+      logger.warn({ msg: "Z-API unhandled message type — full payload", payload: JSON.stringify(payload) });
       return;
     }
 
