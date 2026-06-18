@@ -13,6 +13,7 @@ import CheckIsValidContact from "../services/WbotServices/CheckIsValidContact";
 import GetProfilePicUrl from "../services/WbotServices/GetProfilePicUrl";
 import AppError from "../errors/AppError";
 import GetContactService from "../services/ContactServices/GetContactService";
+import Ticket from "../models/Ticket";
 
 type IndexQuery = {
   searchParam: string;
@@ -149,6 +150,36 @@ export const update = async (
   });
 
   return res.status(200).json(contact);
+};
+
+export const merge = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  const { contactId, duplicateId } = req.params;
+
+  const primary = await ShowContactService(contactId);
+  const duplicate = await ShowContactService(duplicateId);
+
+  if (!primary || !duplicate) {
+    throw new AppError("ERR_NO_CONTACT_FOUND", 404);
+  }
+
+  // Move all tickets from duplicate to primary
+  await Ticket.update({ contactId: primary.id }, { where: { contactId: duplicate.id } });
+
+  // Copy LID from duplicate if primary doesn't have one
+  if (!primary.lid && duplicate.lid) {
+    await primary.update({ lid: duplicate.lid });
+  }
+
+  await duplicate.destroy();
+
+  const io = getIO();
+  io.emit("contact", { action: "delete", contactId: duplicateId });
+  io.emit("contact", { action: "update", contact: primary });
+
+  return res.status(200).json(primary);
 };
 
 export const remove = async (

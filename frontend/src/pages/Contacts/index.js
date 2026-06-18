@@ -11,7 +11,6 @@ import TableHead from "@material-ui/core/TableHead";
 import TableRow from "@material-ui/core/TableRow";
 import Paper from "@material-ui/core/Paper";
 import Button from "@material-ui/core/Button";
-import Avatar from "@material-ui/core/Avatar";
 import WhatsAppIcon from "@material-ui/icons/WhatsApp";
 import SearchIcon from "@material-ui/icons/Search";
 import TextField from "@material-ui/core/TextField";
@@ -20,6 +19,17 @@ import InputAdornment from "@material-ui/core/InputAdornment";
 import IconButton from "@material-ui/core/IconButton";
 import DeleteOutlineIcon from "@material-ui/icons/DeleteOutline";
 import EditIcon from "@material-ui/icons/Edit";
+import CallMergeIcon from "@material-ui/icons/CallMerge";
+import Dialog from "@material-ui/core/Dialog";
+import DialogTitle from "@material-ui/core/DialogTitle";
+import DialogContent from "@material-ui/core/DialogContent";
+import DialogActions from "@material-ui/core/DialogActions";
+import List from "@material-ui/core/List";
+import ListItem from "@material-ui/core/ListItem";
+import ListItemAvatar from "@material-ui/core/ListItemAvatar";
+import ListItemText from "@material-ui/core/ListItemText";
+import Avatar from "@material-ui/core/Avatar";
+import Typography from "@material-ui/core/Typography";
 
 import api from "../../services/api";
 import TableRowSkeleton from "../../components/TableRowSkeleton";
@@ -106,6 +116,10 @@ const Contacts = () => {
   const [hasMore, setHasMore] = useState(false);
   const [newTicketModalOpen, setNewTicketModalOpen] = useState(false);
   const [pendingNewTicketContactId, setPendingNewTicketContactId] = useState(null);
+  const [mergeModalOpen, setMergeModalOpen] = useState(false);
+  const [mergingContact, setMergingContact] = useState(null);
+  const [mergeSearch, setMergeSearch] = useState("");
+  const [mergeCandidates, setMergeCandidates] = useState([]);
 
   useEffect(() => {
     dispatch({ type: "RESET" });
@@ -214,6 +228,29 @@ const Contacts = () => {
     }
   };
 
+  const handleOpenMergeModal = async (contact) => {
+    setMergingContact(contact);
+    setMergeSearch(contact.name);
+    try {
+      const { data } = await api.get("/contacts/", { params: { searchParam: contact.name, pageNumber: 1 } });
+      setMergeCandidates(data.contacts.filter(c => c.id !== contact.id));
+    } catch (err) {
+      toastError(err);
+    }
+    setMergeModalOpen(true);
+  };
+
+  const handleMergeContact = async (primaryId) => {
+    try {
+      await api.post(`/contacts/${primaryId}/merge/${mergingContact.id}`);
+      toast.success("Contatos unificados com sucesso!");
+      setMergeModalOpen(false);
+      setMergingContact(null);
+    } catch (err) {
+      toastError(err);
+    }
+  };
+
   const loadMore = () => {
     setPageNumber((prevState) => prevState + 1);
   };
@@ -228,6 +265,41 @@ const Contacts = () => {
 
   return (
     <MainContainer className={classes.mainContainer}>
+      <Dialog open={mergeModalOpen} onClose={() => setMergeModalOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          Unificar contato duplicado
+          <Typography variant="body2" color="textSecondary">
+            Selecione o contato principal. Os tickets do contato duplicado ({mergingContact?.name} — {mergingContact?.number}) serão transferidos para o contato selecionado, e o duplicado será removido.
+          </Typography>
+        </DialogTitle>
+        <DialogContent dividers>
+          <TextField
+            fullWidth
+            margin="dense"
+            variant="outlined"
+            label="Buscar contato principal"
+            value={mergeSearch}
+            onChange={async (e) => {
+              setMergeSearch(e.target.value);
+              try {
+                const { data } = await api.get("/contacts/", { params: { searchParam: e.target.value, pageNumber: 1 } });
+                setMergeCandidates(data.contacts.filter(c => c.id !== mergingContact?.id));
+              } catch (err) { toastError(err); }
+            }}
+          />
+          <List dense>
+            {mergeCandidates.map(c => (
+              <ListItem key={c.id} button onClick={() => handleMergeContact(c.id)}>
+                <ListItemAvatar><Avatar src={c.profilePicUrl} /></ListItemAvatar>
+                <ListItemText primary={c.name} secondary={c.number} />
+              </ListItem>
+            ))}
+          </List>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setMergeModalOpen(false)} color="secondary">Cancelar</Button>
+        </DialogActions>
+      </Dialog>
       <NewTicketWithQueueModal
         open={newTicketModalOpen}
         onClose={() => {
@@ -341,6 +413,19 @@ const Contacts = () => {
                     >
                       <EditIcon />
                     </IconButton>
+                    <Can
+                      role={user.profile}
+                      perform="contacts-page:deleteContact"
+                      yes={() => (
+                        <IconButton
+                          size="small"
+                          title="Unificar contato duplicado"
+                          onClick={() => handleOpenMergeModal(contact)}
+                        >
+                          <CallMergeIcon />
+                        </IconButton>
+                      )}
+                    />
                     <Can
                       role={user.profile}
                       perform="contacts-page:deleteContact"

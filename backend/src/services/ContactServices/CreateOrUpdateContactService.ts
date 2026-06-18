@@ -91,9 +91,14 @@ const CreateOrUpdateContactService = async ({
     return contactByLid;
   }
 
+  // LID-only contact: phone arrived as @lid format, real number unknown.
+  // Store the LID digits as a temporary number so the row is valid.
+  // When the real phone number arrives later, the merge logic above will unify them.
+  const effectiveNumber = number || (lid as string);
+
   const created = await Contact.create({
     name,
-    number,
+    number: effectiveNumber,
     lid,
     profilePicUrl,
     email,

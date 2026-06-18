@@ -166,8 +166,12 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
     if (payload.isNewsletter === true) return;
 
     const rawPhone: string = payload.participantPhone || payload.phone || "";
-    const phone = normalizeBrazilianPhone(rawPhone.replace(/\D/g, ""));
-    if (!phone) return;
+    // Z-API sometimes sends the contact's LID as the phone field (e.g. "165785905430532@lid").
+    // In that case the stripped digits are NOT a real phone number — treat them as a LID.
+    const phoneIsLid = rawPhone.endsWith("@lid");
+    const phone = phoneIsLid
+      ? ""
+      : normalizeBrazilianPhone(rawPhone.replace(/\D/g, ""));
 
     const isGroup = Boolean(payload.participantPhone);
     const groupRawPhone: string = isGroup ? payload.phone || "" : "";
@@ -178,19 +182,21 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
     // the participant's number isn't in the device address book. Guard against that.
     const senderName: string =
       isGroup && payload.senderName === payload.chatName
-        ? phone
+        ? (phone || rawPhone.replace(/\D/g, ""))
         : payload.senderName || phone;
 
     // chatLid is the WhatsApp LID for this contact — stored so MessageStatusCallback
     // can look up the contact when phone arrives in "255...@lid" format.
-    // Z-API sends chatLid with "@lid" suffix (e.g. "255254251761678@lid") — strip it
-    // so it matches the lookup in MessageStatusCallback (which also strips @lid).
+    // Also use rawPhone as LID source when it was already in @lid format.
     const rawChatLid: string = !isGroup
-      ? (payload.chatLid || payload.participantLid || "")
+      ? (payload.chatLid || payload.participantLid || (phoneIsLid ? rawPhone : ""))
       : "";
     const contactLid: string | undefined = rawChatLid
       ? rawChatLid.replace(/@lid$/, "")
       : undefined;
+
+    // Must have at least a phone number or a LID to identify the contact
+    if (!phone && !contactLid) return;
 
     const contactPayload: ContactPayload = {
       name: senderName,
