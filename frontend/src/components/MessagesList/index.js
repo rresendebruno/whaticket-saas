@@ -25,6 +25,7 @@ import {
   DoneAll,
   ExpandMore,
   GetApp,
+  Lock,
   Reply,
 } from "@material-ui/icons";
 
@@ -306,6 +307,34 @@ const useStyles = makeStyles((theme) => ({
     paddingRight: 4,
     paddingLeft: 4,
     cursor: "pointer",
+  },
+
+  internalNote: {
+    alignSelf: "center",
+    maxWidth: 520,
+    width: "fit-content",
+    margin: "4px auto",
+    padding: "6px 14px",
+    borderRadius: 8,
+    backgroundColor: theme.palette.type === "dark" ? "#2a2010" : "#fff8e1",
+    border: `1px dashed ${theme.palette.type === "dark" ? "#6b5c2a" : "#f0c040"}`,
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 6,
+  },
+
+  internalNoteText: {
+    fontSize: "0.82em",
+    color: theme.palette.type === "dark" ? "#c8a84b" : "#7a5f00",
+    fontStyle: "italic",
+    lineHeight: 1.4,
+  },
+
+  internalNoteIcon: {
+    fontSize: "0.9em",
+    color: theme.palette.type === "dark" ? "#c8a84b" : "#c8970a",
+    marginTop: 1,
+    flexShrink: 0,
   },
 }));
 
@@ -666,9 +695,26 @@ const MessagesList = ({ ticketId, isGroup }) => {
     );
   };
 
+  const renderInternalNote = (message, index) => (
+    <React.Fragment key={message.id}>
+      {renderDailyTimestamps(message, index)}
+      <div className={classes.internalNote}>
+        <Lock className={classes.internalNoteIcon} fontSize="inherit" />
+        <span className={classes.internalNoteText}>
+          <MarkdownWrapper>{message.body}</MarkdownWrapper>
+        </span>
+      </div>
+    </React.Fragment>
+  );
+
   const renderMessages = () => {
     if (messagesList.length > 0) {
       const viewMessagesList = messagesList.map((message, index) => {
+        // Internal notes are only visible to agents — render with special style
+        if (message.mediaType === "note") {
+          return renderInternalNote(message, index);
+        }
+
         const isSelected = selectedMessages.has(message.id);
 
         if (!message.fromMe) {

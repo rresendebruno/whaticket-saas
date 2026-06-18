@@ -1,11 +1,13 @@
 import { Request, Response } from "express";
 import axios from "axios";
+import { Op } from "sequelize";
 
 import SetTicketMessagesAsRead from "../helpers/SetTicketMessagesAsRead";
 import { getIO } from "../libs/socket";
 import Message from "../models/Message";
 import Contact from "../models/Contact";
 import Ticket from "../models/Ticket";
+import User from "../models/User";
 import AppError from "../errors/AppError";
 import { logger } from "../utils/logger";
 
@@ -14,6 +16,7 @@ import ShowTicketService from "../services/TicketServices/ShowTicketService";
 import DeleteWhatsAppMessage from "../services/WbotServices/DeleteWhatsAppMessage";
 import SendWhatsAppMedia from "../services/WbotServices/SendWhatsAppMedia";
 import SendWhatsAppMessage from "../services/WbotServices/SendWhatsAppMessage";
+import CreateMessageService from "../services/MessageServices/CreateMessageService";
 
 type IndexQuery = {
   pageNumber: string;
@@ -68,22 +71,31 @@ export const forward = async (
 ): Promise<Response> => {
   const { messageId } = req.params;
   const { contactId } = req.body;
+  const agentId = Number((req as any).user.id);
 
   if (!contactId) throw new AppError("ERR_MISSING_CONTACT_ID");
 
-  const message = await Message.findByPk(messageId, {
+  // Load source message with full ticket + contact
+  const sourceMessage = await Message.findByPk(messageId, {
     include: [{ model: Ticket, include: [Contact] }]
   });
-  if (!message) throw new AppError("ERR_MESSAGE_NOT_FOUND");
+  if (!sourceMessage) throw new AppError("ERR_MESSAGE_NOT_FOUND");
+
+  const sourceTicket = sourceMessage.ticket;
+  if (!sourceTicket) throw new AppError("ERR_MESSAGE_NOT_FOUND");
 
   const targetContact = await Contact.findByPk(contactId);
   if (!targetContact) throw new AppError("ERR_CONTACT_NOT_FOUND");
 
-  const sourcePhone = message.ticket?.contact?.number;
+  const sourcePhone = sourceTicket.contact?.number;
   const targetPhone = targetContact.number;
-
   if (!sourcePhone || !targetPhone) throw new AppError("ERR_INVALID_PHONE");
 
+  // Get agent name for notes
+  const agent = await User.findByPk(agentId);
+  const agentName = agent?.name || "Agente";
+
+  // --- Call Z-API forward-message ---
   const instanceId = process.env.ZAPI_INSTANCE_ID;
   const token = process.env.ZAPI_TOKEN;
   const clientToken = process.env.ZAPI_CLIENT_TOKEN || "";
@@ -94,11 +106,68 @@ export const forward = async (
       { phone: targetPhone, messageId, messagePhone: sourcePhone },
       { headers: { "Content-Type": "application/json", "Client-Token": clientToken } }
     );
-    logger.info({ msg: "Forward message sent", messageId, targetPhone, sourcePhone });
+    logger.info({ msg: "Forward message Z-API sent", messageId, targetPhone });
   } catch (err: any) {
-    logger.error({ msg: "Forward message error", err: err?.response?.data || err?.message });
+    logger.error({ msg: "Forward message Z-API error", err: err?.response?.data || err?.message });
     throw new AppError("ERR_FORWARD_WAPP_MSG");
   }
+
+  // --- Find or create ticket for target contact ---
+  let targetTicket = await Ticket.findOne({
+    where: {
+      contactId: targetContact.id,
+      whatsappId: sourceTicket.whatsappId,
+      status: { [Op.in]: ["open", "pending"] }
+    },
+    include: [Contact]
+  });
+
+  if (!targetTicket) {
+    const created = await Ticket.create({
+      contactId: targetContact.id,
+      whatsappId: sourceTicket.whatsappId,
+      queueId: sourceTicket.queueId || null,
+      userId: agentId,
+      status: "pending",
+      isGroup: false,
+      unreadMessages: 0,
+      lastMessage: ""
+    } as any);
+
+    targetTicket = await Ticket.findByPk(created.id, { include: [Contact] });
+    logger.info({ msg: "Forward: new ticket created", ticketId: created.id, contact: targetContact.name });
+
+    const io = getIO();
+    io.emit("ticket", { action: "update", ticket: targetTicket });
+  }
+
+  const ts = Date.now();
+
+  // --- Internal note on SOURCE ticket ---
+  await CreateMessageService({
+    messageData: {
+      id: `note-fwd-src-${ts}`,
+      ticketId: sourceTicket.id,
+      body: `↪ *${agentName}* encaminhou uma mensagem para *${targetContact.name}*`,
+      fromMe: true,
+      read: true,
+      mediaType: "note",
+      ack: 3
+    }
+  });
+
+  // --- Internal note on TARGET ticket ---
+  await CreateMessageService({
+    messageData: {
+      id: `note-fwd-dst-${ts}`,
+      ticketId: targetTicket!.id,
+      body: `↪ Mensagem encaminhada por *${agentName}* do ticket *#${sourceTicket.id}* (${sourceTicket.contact?.name || sourcePhone})`,
+      fromMe: true,
+      read: true,
+      mediaType: "note",
+      ack: 3
+    }
+  });
 
   return res.send();
 };
