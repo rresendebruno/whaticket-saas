@@ -42,7 +42,8 @@ const useStyles = makeStyles((theme) => ({
   },
 
   messagesList: {
-    backgroundImage: `url(${whatsBackground})`,
+    backgroundImage: theme.palette.type === "dark" ? "none" : `url(${whatsBackground})`,
+    backgroundColor: theme.palette.type === "dark" ? "#0d1117" : "transparent",
     display: "flex",
     flexDirection: "column",
     flexGrow: 1,
@@ -79,8 +80,8 @@ const useStyles = makeStyles((theme) => ({
     },
 
     whiteSpace: "pre-wrap",
-    backgroundColor: "#ffffff",
-    color: "#303030",
+    backgroundColor: theme.palette.type === "dark" ? "#1e2a35" : "#ffffff",
+    color: theme.palette.type === "dark" ? "#e0e0e0" : "#303030",
     alignSelf: "flex-start",
     borderTopLeftRadius: 0,
     borderTopRightRadius: 8,
@@ -96,7 +97,7 @@ const useStyles = makeStyles((theme) => ({
   quotedContainerLeft: {
     margin: "-3px -80px 6px -6px",
     overflow: "hidden",
-    backgroundColor: "#f0f0f0",
+    backgroundColor: theme.palette.type === "dark" ? "#253341" : "#f0f0f0",
     borderRadius: "7.5px",
     display: "flex",
     position: "relative",
@@ -133,8 +134,8 @@ const useStyles = makeStyles((theme) => ({
     },
 
     whiteSpace: "pre-wrap",
-    backgroundColor: "#dcf8c6",
-    color: "#303030",
+    backgroundColor: theme.palette.type === "dark" ? "#1a3a2a" : "#dcf8c6",
+    color: theme.palette.type === "dark" ? "#e0e0e0" : "#303030",
     alignSelf: "flex-end",
     borderTopLeftRadius: 8,
     borderTopRightRadius: 8,
@@ -150,7 +151,7 @@ const useStyles = makeStyles((theme) => ({
   quotedContainerRight: {
     margin: "-3px -80px 6px -6px",
     overflowY: "hidden",
-    backgroundColor: "#cfe9ba",
+    backgroundColor: theme.palette.type === "dark" ? "#1e3d2a" : "#cfe9ba",
     borderRadius: "7.5px",
     display: "flex",
     position: "relative",
@@ -220,14 +221,14 @@ const useStyles = makeStyles((theme) => ({
     textAlign: "center",
     alignSelf: "center",
     width: "110px",
-    backgroundColor: "#e1f3fb",
+    backgroundColor: theme.palette.type === "dark" ? "#1c2b38" : "#e1f3fb",
     margin: "10px",
     borderRadius: "10px",
     boxShadow: "0 1px 1px #b3b3b3",
   },
 
   dailyTimestampText: {
-    color: "#808888",
+    color: theme.palette.type === "dark" ? "#aaaaaa" : "#808888",
     padding: 8,
     alignSelf: "center",
     marginLeft: "0px",

@@ -5,6 +5,7 @@ import MenuItem from "@material-ui/core/MenuItem";
 import { i18n } from "../../translate/i18n";
 import api from "../../services/api";
 import ConfirmationModal from "../ConfirmationModal";
+import ForwardMessageModal from "../ForwardMessageModal";
 import { Menu } from "@material-ui/core";
 import { ReplyMessageContext } from "../../context/ReplyingMessage/ReplyingMessageContext";
 import toastError from "../../errors/toastError";
@@ -12,6 +13,7 @@ import toastError from "../../errors/toastError";
 const MessageOptionsMenu = ({ message, menuOpen, handleClose, anchorEl }) => {
   const { setReplyingMessage } = useContext(ReplyMessageContext);
   const [confirmationOpen, setConfirmationOpen] = useState(false);
+  const [forwardOpen, setForwardOpen] = useState(false);
 
   const handleDeleteMessage = async () => {
     try {
@@ -31,6 +33,11 @@ const MessageOptionsMenu = ({ message, menuOpen, handleClose, anchorEl }) => {
     handleClose();
   };
 
+  const handleOpenForwardModal = () => {
+    setForwardOpen(true);
+    handleClose();
+  };
+
   return (
     <>
       <ConfirmationModal
@@ -41,6 +48,11 @@ const MessageOptionsMenu = ({ message, menuOpen, handleClose, anchorEl }) => {
       >
         {i18n.t("messageOptionsMenu.confirmationModal.message")}
       </ConfirmationModal>
+      <ForwardMessageModal
+        open={forwardOpen}
+        onClose={() => setForwardOpen(false)}
+        messageId={message?.id}
+      />
       <Menu
         anchorEl={anchorEl}
         getContentAnchorEl={null}
@@ -62,6 +74,9 @@ const MessageOptionsMenu = ({ message, menuOpen, handleClose, anchorEl }) => {
         )}
         <MenuItem onClick={hanldeReplyMessage}>
           {i18n.t("messageOptionsMenu.reply")}
+        </MenuItem>
+        <MenuItem onClick={handleOpenForwardModal}>
+          Encaminhar
         </MenuItem>
       </Menu>
     </>
