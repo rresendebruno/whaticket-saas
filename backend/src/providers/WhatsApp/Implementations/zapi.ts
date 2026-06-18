@@ -114,12 +114,12 @@ const init = async (whatsapp: Whatsapp): Promise<void> => {
       logger.warn({ msg: "Could not set Z-API webhooks", err });
     }
 
-    // Ensure read receipts are enabled in WhatsApp privacy settings
+    // Ensure read receipts are enabled in WhatsApp privacy settings (not available on all plans)
     try {
       await zapiPost("/privacy/read-receipts", {});
       logger.info("Z-API read receipts privacy: enabled");
-    } catch (err) {
-      logger.warn({ msg: "Could not enable Z-API read-receipts privacy setting", err });
+    } catch {
+      // Silently ignore — endpoint not available on all Z-API plans
     }
 
     // Check current connection status
