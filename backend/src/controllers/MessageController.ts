@@ -141,6 +141,22 @@ export const forward = async (
     io.emit("ticket", { action: "update", ticket: targetTicket });
   }
 
+  // Resolve a legible description of the forwarded message content
+  const mediaLabels: Record<string, string> = {
+    image: "[Imagem]",
+    audio: "[Áudio]",
+    ptt: "[Áudio]",
+    video: "[Vídeo]",
+    document: "[Documento]",
+    vcard: "[Contato]",
+    sticker: "[Figurinha]",
+    location: "[Localização]"
+  };
+  const msgContent =
+    sourceMessage.body && sourceMessage.body.trim()
+      ? sourceMessage.body.trim()
+      : mediaLabels[sourceMessage.mediaType] || "[Mídia]";
+
   const ts = Date.now();
 
   // --- Internal note on SOURCE ticket ---
@@ -148,7 +164,7 @@ export const forward = async (
     messageData: {
       id: `note-fwd-src-${ts}`,
       ticketId: sourceTicket.id,
-      body: `↪ *${agentName}* encaminhou uma mensagem para *${targetContact.name}*`,
+      body: `↪ *${agentName}* encaminhou para *${targetContact.name}*: ${msgContent}`,
       fromMe: true,
       read: true,
       mediaType: "note",
@@ -161,7 +177,7 @@ export const forward = async (
     messageData: {
       id: `note-fwd-dst-${ts}`,
       ticketId: targetTicket!.id,
-      body: `↪ Mensagem encaminhada por *${agentName}* do ticket *#${sourceTicket.id}* (${sourceTicket.contact?.name || sourcePhone})`,
+      body: `↪ Encaminhada por *${agentName}* do ticket *#${sourceTicket.id}* (${sourceTicket.contact?.name || sourcePhone})\n${msgContent}`,
       fromMe: true,
       read: true,
       mediaType: "note",
