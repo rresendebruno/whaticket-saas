@@ -62,7 +62,8 @@ const useStyles = makeStyles((theme) => ({
   },
 }));
 
-const ForwardMessageModal = ({ open, onClose, messageId }) => {
+// messageIds: array of message IDs to forward
+const ForwardMessageModal = ({ open, onClose, messageIds = [] }) => {
   const classes = useStyles();
   const [search, setSearch] = useState("");
   const [contacts, setContacts] = useState([]);
@@ -102,13 +103,19 @@ const ForwardMessageModal = ({ open, onClose, messageId }) => {
   };
 
   const handleForward = async () => {
-    if (!selectedContact) return;
+    if (!selectedContact || messageIds.length === 0) return;
     setSending(true);
     try {
-      await api.post(`/messages/${messageId}/forward`, {
-        contactId: selectedContact.id,
-      });
-      toast.success("Mensagem encaminhada!");
+      for (const msgId of messageIds) {
+        await api.post(`/messages/${msgId}/forward`, {
+          contactId: selectedContact.id,
+        });
+      }
+      toast.success(
+        messageIds.length === 1
+          ? "Mensagem encaminhada!"
+          : `${messageIds.length} mensagens encaminhadas!`
+      );
       onClose();
     } catch (err) {
       toastError(err);
@@ -119,7 +126,11 @@ const ForwardMessageModal = ({ open, onClose, messageId }) => {
 
   return (
     <Dialog className={classes.dialog} open={open} onClose={onClose}>
-      <DialogTitle>Encaminhar mensagem</DialogTitle>
+      <DialogTitle>
+        {messageIds.length > 1
+          ? `Encaminhar ${messageIds.length} mensagens`
+          : "Encaminhar mensagem"}
+      </DialogTitle>
       <DialogContent>
         <TextField
           className={classes.searchField}

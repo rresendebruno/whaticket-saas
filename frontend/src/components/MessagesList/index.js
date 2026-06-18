@@ -7,18 +7,25 @@ import clsx from "clsx";
 import { green } from "@material-ui/core/colors";
 import {
   Button,
+  Checkbox,
   CircularProgress,
   Divider,
   IconButton,
   makeStyles,
+  Paper,
+  Tooltip,
+  Typography,
 } from "@material-ui/core";
 import {
   AccessTime,
   Block,
+  CheckBoxOutlineBlank,
+  Close,
   Done,
   DoneAll,
   ExpandMore,
   GetApp,
+  Reply,
 } from "@material-ui/icons";
 
 import MarkdownWrapper from "../MarkdownWrapper";
@@ -26,6 +33,7 @@ import VcardPreview from "../VcardPreview";
 import LocationPreview from "../LocationPreview";
 import ModalImageCors from "../ModalImageCors";
 import MessageOptionsMenu from "../MessageOptionsMenu";
+import ForwardMessageModal from "../ForwardMessageModal";
 import whatsBackground from "../../assets/wa-background.png";
 
 import api from "../../services/api";
@@ -260,6 +268,45 @@ const useStyles = makeStyles((theme) => ({
     backgroundColor: "inherit",
     padding: 10,
   },
+
+  selectionBar: {
+    position: "sticky",
+    bottom: 0,
+    zIndex: 10,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "8px 16px",
+    backgroundColor: theme.palette.background.paper,
+    boxShadow: "0 -2px 8px rgba(0,0,0,0.15)",
+  },
+
+  selectionBarActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  messageSelected: {
+    backgroundColor:
+      theme.palette.type === "dark"
+        ? "rgba(255,255,255,0.08)"
+        : "rgba(0,0,0,0.06)",
+    borderRadius: 8,
+  },
+
+  messageRow: {
+    display: "flex",
+    alignItems: "center",
+  },
+
+  checkboxCell: {
+    display: "flex",
+    alignItems: "center",
+    paddingRight: 4,
+    paddingLeft: 4,
+    cursor: "pointer",
+  },
 }));
 
 const reducer = (state, action) => {
@@ -321,6 +368,10 @@ const MessagesList = ({ ticketId, isGroup }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const messageOptionsMenuOpen = Boolean(anchorEl);
   const currentTicketId = useRef(ticketId);
+
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedMessages, setSelectedMessages] = useState(new Set());
+  const [forwardModalOpen, setForwardModalOpen] = useState(false);
 
   useEffect(() => {
     dispatch({ type: "RESET" });
@@ -414,6 +465,29 @@ const MessagesList = ({ ticketId, isGroup }) => {
 
   const handleCloseMessageOptionsMenu = (e) => {
     setAnchorEl(null);
+  };
+
+  const handleStartForward = (message) => {
+    setSelectionMode(true);
+    setSelectedMessages(new Set([message.id]));
+  };
+
+  const handleToggleSelection = (messageId) => {
+    setSelectedMessages((prev) => {
+      const next = new Set(prev);
+      if (next.has(messageId)) {
+        next.delete(messageId);
+        if (next.size === 0) setSelectionMode(false);
+      } else {
+        next.add(messageId);
+      }
+      return next;
+    });
+  };
+
+  const handleExitSelection = () => {
+    setSelectionMode(false);
+    setSelectedMessages(new Set());
   };
 
   const checkMessageMedia = (message) => {
@@ -595,42 +669,65 @@ const MessagesList = ({ ticketId, isGroup }) => {
   const renderMessages = () => {
     if (messagesList.length > 0) {
       const viewMessagesList = messagesList.map((message, index) => {
+        const isSelected = selectedMessages.has(message.id);
+
         if (!message.fromMe) {
           return (
             <React.Fragment key={message.id}>
               {renderDailyTimestamps(message, index)}
               {renderMessageDivider(message, index)}
-              <div className={classes.messageLeft}>
-                <IconButton
-                  variant="contained"
-                  size="small"
-                  id="messageActionsButton"
-                  disabled={message.isDeleted}
-                  className={classes.messageActionsButton}
-                  onClick={(e) => handleOpenMessageOptionsMenu(e, message)}
-                >
-                  <ExpandMore />
-                </IconButton>
-                {isGroup && (
-                  <span className={classes.messageContactName}>
-                    {message.contact?.name}
-                  </span>
+              <div
+                className={clsx(classes.messageRow, {
+                  [classes.messageSelected]: isSelected && selectionMode,
+                })}
+                onClick={selectionMode ? () => handleToggleSelection(message.id) : undefined}
+                style={selectionMode ? { cursor: "pointer" } : undefined}
+              >
+                {selectionMode && (
+                  <div className={classes.checkboxCell}>
+                    <Checkbox
+                      size="small"
+                      checked={isSelected}
+                      onChange={() => handleToggleSelection(message.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      color="primary"
+                    />
+                  </div>
                 )}
-                {(message.mediaUrl || message.mediaType === "location" || message.mediaType === "vcard"
-                  //|| message.mediaType === "multi_vcard"
-                ) && checkMessageMedia(message)}
-                <div className={classes.textContentItem}>
-                  {message.isDeleted && (
-                    <span style={{ display: "flex", alignItems: "center", color: "rgba(0,0,0,0.36)", fontStyle: "italic", fontSize: "0.82em", marginBottom: 2 }}>
-                      <Block color="disabled" fontSize="small" style={{ marginRight: 4, fontSize: "0.95em" }} />
-                      Mensagem apagada pelo cliente
+                <div className={classes.messageLeft}>
+                  {!selectionMode && (
+                    <IconButton
+                      variant="contained"
+                      size="small"
+                      id="messageActionsButton"
+                      disabled={message.isDeleted}
+                      className={classes.messageActionsButton}
+                      onClick={(e) => handleOpenMessageOptionsMenu(e, message)}
+                    >
+                      <ExpandMore />
+                    </IconButton>
+                  )}
+                  {isGroup && (
+                    <span className={classes.messageContactName}>
+                      {message.contact?.name}
                     </span>
                   )}
-                  {message.quotedMsg && renderQuotedMessage(message)}
-                  <MarkdownWrapper>{message.body}</MarkdownWrapper>
-                  <span className={classes.timestamp}>
-                    {format(parseISO(message.createdAt), "HH:mm")}
-                  </span>
+                  {(message.mediaUrl || message.mediaType === "location" || message.mediaType === "vcard"
+                    //|| message.mediaType === "multi_vcard"
+                  ) && checkMessageMedia(message)}
+                  <div className={classes.textContentItem}>
+                    {message.isDeleted && (
+                      <span style={{ display: "flex", alignItems: "center", color: "rgba(0,0,0,0.36)", fontStyle: "italic", fontSize: "0.82em", marginBottom: 2 }}>
+                        <Block color="disabled" fontSize="small" style={{ marginRight: 4, fontSize: "0.95em" }} />
+                        Mensagem apagada pelo cliente
+                      </span>
+                    )}
+                    {message.quotedMsg && renderQuotedMessage(message)}
+                    <MarkdownWrapper>{message.body}</MarkdownWrapper>
+                    <span className={classes.timestamp}>
+                      {format(parseISO(message.createdAt), "HH:mm")}
+                    </span>
+                  </div>
                 </div>
               </div>
             </React.Fragment>
@@ -640,51 +737,72 @@ const MessagesList = ({ ticketId, isGroup }) => {
             <React.Fragment key={message.id}>
               {renderDailyTimestamps(message, index)}
               {renderMessageDivider(message, index)}
-              <div className={classes.messageRight}>
-                <IconButton
-                  variant="contained"
-                  size="small"
-                  id="messageActionsButton"
-                  disabled={message.isDeleted}
-                  className={classes.messageActionsButton}
-                  onClick={(e) => handleOpenMessageOptionsMenu(e, message)}
-                >
-                  <ExpandMore />
-                </IconButton>
-                {!message.isDeleted && (message.mediaUrl || message.mediaType === "location" || message.mediaType === "vcard"
-                  //|| message.mediaType === "multi_vcard"
-                ) && checkMessageMedia(message)}
-                <div
-                  className={clsx(classes.textContentItem, {
-                    [classes.textContentItemDeleted]: message.isDeleted,
-                  })}
-                >
-                  {message.isDeleted ? (
-                    (() => {
-                      const match = message.body?.match(/^\[DELETED_BY:(.+?)\]([\s\S]*)$/);
-                      const deletedByName = match ? match[1] : message.body;
-                      const originalBody = match ? match[2] : null;
-                      return (
-                        <>
-                          <span style={{ display: "flex", alignItems: "center", gap: 4, color: "rgba(0,0,0,0.45)", fontStyle: "italic", fontSize: "0.85em", marginBottom: originalBody ? 4 : 0 }}>
-                            <Block color="disabled" fontSize="small" className={classes.deletedIcon} />
-                            Mensagem apagada por {deletedByName}
-                          </span>
-                          {originalBody && <MarkdownWrapper>{originalBody}</MarkdownWrapper>}
-                        </>
-                      );
-                    })()
-                  ) : (
-                    <>
-                      {message.quotedMsg && renderQuotedMessage(message)}
-                      <MarkdownWrapper>{message.body}</MarkdownWrapper>
-                    </>
+              <div
+                className={clsx(classes.messageRow, {
+                  [classes.messageSelected]: isSelected && selectionMode,
+                })}
+                style={{ justifyContent: "flex-end", ...(selectionMode && { cursor: "pointer" }) }}
+                onClick={selectionMode ? () => handleToggleSelection(message.id) : undefined}
+              >
+                <div className={classes.messageRight}>
+                  {!selectionMode && (
+                    <IconButton
+                      variant="contained"
+                      size="small"
+                      id="messageActionsButton"
+                      disabled={message.isDeleted}
+                      className={classes.messageActionsButton}
+                      onClick={(e) => handleOpenMessageOptionsMenu(e, message)}
+                    >
+                      <ExpandMore />
+                    </IconButton>
                   )}
-                  <span className={classes.timestamp}>
-                    {format(parseISO(message.createdAt), "HH:mm")}
-                    {renderMessageAck(message)}
-                  </span>
+                  {!message.isDeleted && (message.mediaUrl || message.mediaType === "location" || message.mediaType === "vcard"
+                    //|| message.mediaType === "multi_vcard"
+                  ) && checkMessageMedia(message)}
+                  <div
+                    className={clsx(classes.textContentItem, {
+                      [classes.textContentItemDeleted]: message.isDeleted,
+                    })}
+                  >
+                    {message.isDeleted ? (
+                      (() => {
+                        const match = message.body?.match(/^\[DELETED_BY:(.+?)\]([\s\S]*)$/);
+                        const deletedByName = match ? match[1] : message.body;
+                        const originalBody = match ? match[2] : null;
+                        return (
+                          <>
+                            <span style={{ display: "flex", alignItems: "center", gap: 4, color: "rgba(0,0,0,0.45)", fontStyle: "italic", fontSize: "0.85em", marginBottom: originalBody ? 4 : 0 }}>
+                              <Block color="disabled" fontSize="small" className={classes.deletedIcon} />
+                              Mensagem apagada por {deletedByName}
+                            </span>
+                            {originalBody && <MarkdownWrapper>{originalBody}</MarkdownWrapper>}
+                          </>
+                        );
+                      })()
+                    ) : (
+                      <>
+                        {message.quotedMsg && renderQuotedMessage(message)}
+                        <MarkdownWrapper>{message.body}</MarkdownWrapper>
+                      </>
+                    )}
+                    <span className={classes.timestamp}>
+                      {format(parseISO(message.createdAt), "HH:mm")}
+                      {renderMessageAck(message)}
+                    </span>
+                  </div>
                 </div>
+                {selectionMode && (
+                  <div className={classes.checkboxCell}>
+                    <Checkbox
+                      size="small"
+                      checked={isSelected}
+                      onChange={() => handleToggleSelection(message.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      color="primary"
+                    />
+                  </div>
+                )}
               </div>
             </React.Fragment>
           );
@@ -703,6 +821,15 @@ const MessagesList = ({ ticketId, isGroup }) => {
         anchorEl={anchorEl}
         menuOpen={messageOptionsMenuOpen}
         handleClose={handleCloseMessageOptionsMenu}
+        onStartForward={handleStartForward}
+      />
+      <ForwardMessageModal
+        open={forwardModalOpen}
+        onClose={() => {
+          setForwardModalOpen(false);
+          handleExitSelection();
+        }}
+        messageIds={Array.from(selectedMessages)}
       />
       <div
         id="messagesList"
@@ -715,6 +842,34 @@ const MessagesList = ({ ticketId, isGroup }) => {
         <div>
           <CircularProgress className={classes.circleLoading} />
         </div>
+      )}
+      {selectionMode && (
+        <Paper className={classes.selectionBar} elevation={4}>
+          <Typography variant="body2">
+            {selectedMessages.size === 1
+              ? "1 mensagem selecionada"
+              : `${selectedMessages.size} mensagens selecionadas`}
+          </Typography>
+          <div className={classes.selectionBarActions}>
+            <Button
+              size="small"
+              startIcon={<Close />}
+              onClick={handleExitSelection}
+            >
+              Cancelar
+            </Button>
+            <Button
+              size="small"
+              variant="contained"
+              color="primary"
+              startIcon={<Reply style={{ transform: "scaleX(-1)" }} />}
+              disabled={selectedMessages.size === 0}
+              onClick={() => setForwardModalOpen(true)}
+            >
+              Encaminhar
+            </Button>
+          </div>
+        </Paper>
       )}
     </div>
   );
