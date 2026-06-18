@@ -95,24 +95,7 @@ export const forward = async (
   const agent = await User.findByPk(agentId);
   const agentName = agent?.name || "Agente";
 
-  // --- Call Z-API forward-message ---
-  const instanceId = process.env.ZAPI_INSTANCE_ID;
-  const token = process.env.ZAPI_TOKEN;
-  const clientToken = process.env.ZAPI_CLIENT_TOKEN || "";
-
-  try {
-    await axios.post(
-      `https://api.z-api.io/instances/${instanceId}/token/${token}/forward-message`,
-      { phone: targetPhone, messageId, messagePhone: sourcePhone },
-      { headers: { "Content-Type": "application/json", "Client-Token": clientToken } }
-    );
-    logger.info({ msg: "Forward message Z-API sent", messageId, targetPhone });
-  } catch (err: any) {
-    logger.error({ msg: "Forward message Z-API error", err: err?.response?.data || err?.message });
-    throw new AppError("ERR_FORWARD_WAPP_MSG");
-  }
-
-  // --- Find or create ticket for target contact ---
+  // --- Find or create ticket for target contact (before Z-API call so we have the ID) ---
   let targetTicket = await Ticket.findOne({
     where: {
       contactId: targetContact.id,
@@ -141,7 +124,43 @@ export const forward = async (
     io.emit("ticket", { action: "update", ticket: targetTicket });
   }
 
-  // Resolve a legible description of the forwarded message content
+  // --- Call Z-API forward-message ---
+  const instanceId = process.env.ZAPI_INSTANCE_ID;
+  const token = process.env.ZAPI_TOKEN;
+  const clientToken = process.env.ZAPI_CLIENT_TOKEN || "";
+
+  let fwdMessageId: string = `fwd-${Date.now()}`;
+  try {
+    const fwdResult = await axios.post(
+      `https://api.z-api.io/instances/${instanceId}/token/${token}/forward-message`,
+      { phone: targetPhone, messageId, messagePhone: sourcePhone },
+      { headers: { "Content-Type": "application/json", "Client-Token": clientToken } }
+    );
+    fwdMessageId = fwdResult.data?.messageId || fwdResult.data?.id || fwdMessageId;
+    logger.info({ msg: "Forward message Z-API sent", messageId, targetPhone, fwdMessageId });
+  } catch (err: any) {
+    logger.error({ msg: "Forward message Z-API error", err: err?.response?.data || err?.message });
+    throw new AppError("ERR_FORWARD_WAPP_MSG");
+  }
+
+  // --- Save the actual forwarded message content to the target ticket ---
+  // Use the raw stored filename so the media URL is reconstructed correctly by the model getter
+  const rawMediaUrl = (sourceMessage as any).getDataValue("mediaUrl") as string | null;
+
+  await CreateMessageService({
+    messageData: {
+      id: fwdMessageId,
+      ticketId: targetTicket!.id,
+      body: sourceMessage.body || "",
+      fromMe: true,
+      read: true,
+      mediaType: sourceMessage.mediaType || "chat",
+      mediaUrl: rawMediaUrl || undefined,
+      ack: 1
+    }
+  });
+
+  // --- Resolve a label for the note describing what was forwarded ---
   const mediaLabels: Record<string, string> = {
     image: "[Imagem]",
     audio: "[Áudio]",
@@ -154,7 +173,6 @@ export const forward = async (
   };
   const isMediaType = Object.keys(mediaLabels).includes(sourceMessage.mediaType);
   const rawBody = sourceMessage.body?.trim() || "";
-  // When body is just a stored filename (no spaces, has file extension) treat as no caption
   const isFilename = isMediaType && rawBody.length > 0 && !/\s/.test(rawBody) && /\.[a-z0-9]{2,5}$/i.test(rawBody);
   const caption = isFilename ? "" : rawBody;
   const mediaLabel = mediaLabels[sourceMessage.mediaType];
@@ -177,12 +195,12 @@ export const forward = async (
     }
   });
 
-  // --- Internal note on TARGET ticket ---
+  // --- Internal note on TARGET ticket (appears after the forwarded message) ---
   await CreateMessageService({
     messageData: {
       id: `note-fwd-dst-${ts}`,
       ticketId: targetTicket!.id,
-      body: `↪ Encaminhada por *${agentName}* do ticket *#${sourceTicket.id}* (${sourceTicket.contact?.name || sourcePhone})\n${msgContent}`,
+      body: `↪ Encaminhada por *${agentName}* do ticket *#${sourceTicket.id}* (${sourceTicket.contact?.name || sourcePhone})`,
       fromMe: true,
       read: true,
       mediaType: "note",
