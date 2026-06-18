@@ -1,6 +1,7 @@
 import AppError from "../../errors/AppError";
 import Contact from "../../models/Contact";
 import CreateContactService from "./CreateContactService";
+import normalizeBrazilianPhone from "../../helpers/normalizeBrazilianPhone";
 
 interface ExtraInfo {
   name: string;
@@ -17,8 +18,10 @@ interface Request {
 
 const GetContactService = async ({
   name,
-  number
+  number: rawNumber
 }: Request): Promise<Contact> => {
+  const number = normalizeBrazilianPhone(rawNumber.replace(/\D/g, ""));
+
   const numberExists = await Contact.findOne({
     where: { number }
   });
