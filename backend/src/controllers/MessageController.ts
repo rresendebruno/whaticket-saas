@@ -211,45 +211,6 @@ export const forward = async (
   return res.send();
 };
 
-export const sendCall = async (
-  req: Request,
-  res: Response
-): Promise<Response> => {
-  const { ticketId } = req.params;
-
-  const ticket = await ShowTicketService(ticketId);
-  if (!ticket) throw new AppError("ERR_TICKET_NOT_FOUND");
-
-  const rawNumber = ticket.contact?.number;
-  if (!rawNumber) throw new AppError("ERR_INVALID_PHONE");
-
-  // Normalize to digits only (same logic used by the Z-API provider)
-  const phone = rawNumber.replace(/@c\.us|@s\.whatsapp\.net/g, "").replace(/[^\d]/g, "");
-
-  const instanceId = process.env.ZAPI_INSTANCE_ID;
-  const token = process.env.ZAPI_TOKEN;
-  const clientToken = process.env.ZAPI_CLIENT_TOKEN || "";
-
-  logger.info({ msg: "sendCall: calling Z-API", ticketId, rawNumber, phone });
-
-  let zapiResponse: any;
-  try {
-    const result = await axios.post(
-      `https://api.z-api.io/instances/${instanceId}/token/${token}/send-call`,
-      { phone },
-      { headers: { "Content-Type": "application/json", "Client-Token": clientToken } }
-    );
-    zapiResponse = result.data;
-    logger.info({ msg: "sendCall: Z-API response", ticketId, phone, zapiResponse });
-  } catch (err: any) {
-    const errData = err?.response?.data || err?.message;
-    logger.error({ msg: "sendCall: Z-API error", ticketId, phone, errData });
-    throw new AppError("ERR_SEND_CALL_WAPP");
-  }
-
-  return res.json({ success: true, zapiResponse });
-};
-
 export const remove = async (
   req: Request,
   res: Response
