@@ -36,7 +36,8 @@ const TicketActionButtons = ({ ticket }) => {
 	const handleSendCall = async () => {
 		setLoading(true);
 		try {
-			await api.post(`/messages/${ticket.id}/call`);
+			const { data } = await api.post(`/messages/${ticket.id}/call`);
+			console.log("[sendCall] Z-API response:", data?.zapiResponse);
 			toast.success("Chamada iniciada!");
 		} catch (err) {
 			toastError(err);
