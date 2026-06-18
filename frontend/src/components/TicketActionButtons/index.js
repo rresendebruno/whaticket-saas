@@ -2,8 +2,8 @@ import React, { useContext, useState } from "react";
 import { useHistory } from "react-router-dom";
 
 import { makeStyles } from "@material-ui/core/styles";
-import { IconButton } from "@material-ui/core";
-import { MoreVert, Replay } from "@material-ui/icons";
+import { IconButton, Tooltip } from "@material-ui/core";
+import { MoreVert, Replay, Phone } from "@material-ui/icons";
 
 import { i18n } from "../../translate/i18n";
 import api from "../../services/api";
@@ -11,6 +11,7 @@ import TicketOptionsMenu from "../TicketOptionsMenu";
 import ButtonWithSpinner from "../ButtonWithSpinner";
 import toastError from "../../errors/toastError";
 import { AuthContext } from "../../context/Auth/AuthContext";
+import { toast } from "react-toastify";
 
 const useStyles = makeStyles(theme => ({
 	actionButtons: {
@@ -31,6 +32,17 @@ const TicketActionButtons = ({ ticket }) => {
 	const [loading, setLoading] = useState(false);
 	const ticketOptionsMenuOpen = Boolean(anchorEl);
 	const { user } = useContext(AuthContext);
+
+	const handleSendCall = async () => {
+		setLoading(true);
+		try {
+			await api.post(`/messages/${ticket.id}/call`);
+			toast.success("Chamada iniciada!");
+		} catch (err) {
+			toastError(err);
+		}
+		setLoading(false);
+	};
 
 	const handleOpenTicketOptionsMenu = e => {
 		setAnchorEl(e.currentTarget);
@@ -91,6 +103,13 @@ const TicketActionButtons = ({ ticket }) => {
 					>
 						{i18n.t("messagesList.header.buttons.resolve")}
 					</ButtonWithSpinner>
+					<Tooltip title="Iniciar chamada WhatsApp">
+						<span>
+							<IconButton onClick={handleSendCall} disabled={loading}>
+								<Phone />
+							</IconButton>
+						</span>
+					</Tooltip>
 					<IconButton onClick={handleOpenTicketOptionsMenu}>
 						<MoreVert />
 					</IconButton>

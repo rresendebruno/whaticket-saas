@@ -22,4 +22,6 @@ messageRoutes.delete("/messages/:messageId", isAuth, MessageController.remove);
 
 messageRoutes.post("/messages/:messageId/forward", isAuth, MessageController.forward);
 
+messageRoutes.post("/messages/:ticketId/call", isAuth, MessageController.sendCall);
+
 export default messageRoutes;

@@ -211,6 +211,37 @@ export const forward = async (
   return res.send();
 };
 
+export const sendCall = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  const { ticketId } = req.params;
+
+  const ticket = await ShowTicketService(ticketId);
+  if (!ticket) throw new AppError("ERR_TICKET_NOT_FOUND");
+
+  const phone = ticket.contact?.number;
+  if (!phone) throw new AppError("ERR_INVALID_PHONE");
+
+  const instanceId = process.env.ZAPI_INSTANCE_ID;
+  const token = process.env.ZAPI_TOKEN;
+  const clientToken = process.env.ZAPI_CLIENT_TOKEN || "";
+
+  try {
+    await axios.post(
+      `https://api.z-api.io/instances/${instanceId}/token/${token}/send-call`,
+      { phone },
+      { headers: { "Content-Type": "application/json", "Client-Token": clientToken } }
+    );
+    logger.info({ msg: "Call initiated via Z-API", ticketId, phone });
+  } catch (err: any) {
+    logger.error({ msg: "Send call Z-API error", err: err?.response?.data || err?.message });
+    throw new AppError("ERR_SEND_CALL_WAPP");
+  }
+
+  return res.json({ success: true });
+};
+
 export const remove = async (
   req: Request,
   res: Response
