@@ -8,10 +8,30 @@ import authConfig from "../config/auth";
 let io: SocketIO;
 
 export const initIO = (httpServer: Server): SocketIO => {
+  const allowedOrigin = process.env.FRONTEND_URL;
+
   io = new SocketIO(httpServer, {
     cors: {
-      origin: process.env.FRONTEND_URL
-    }
+      origin: (origin, callback) => {
+        // Allow requests with no origin (mobile apps, curl, server-to-server)
+        if (!origin) return callback(null, true);
+        // Allow configured frontend origin
+        if (!allowedOrigin || origin === allowedOrigin) return callback(null, true);
+        // Allow localhost for development
+        if (origin.includes("localhost") || origin.includes("127.0.0.1")) return callback(null, true);
+        callback(new Error(`CORS blocked: ${origin}`));
+      },
+      credentials: true
+    },
+    // Increase timeouts so Traefik/nginx proxies don't kill idle WebSocket connections
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    // Allow both transports; WebSocket first, polling as fallback
+    transports: ["websocket", "polling"],
+    // Allow upgrade from polling → WebSocket
+    allowUpgrades: true,
+    // Larger max buffer for media messages
+    maxHttpBufferSize: 1e8
   });
 
   io.on("connection", socket => {

@@ -192,13 +192,19 @@ const reducer = (state, action) => {
 		const notBelongsToUserQueues = ticket =>
 			ticket.queueId && selectedQueueIds.indexOf(ticket.queueId) === -1;
 
-		socket.on("connect", () => {
+		const joinRooms = () => {
 			if (status) {
 				socket.emit("joinTickets", status);
 			} else {
 				socket.emit("joinNotification");
 			}
-		});
+		};
+
+		// Join on every connect/reconnect
+		socket.on("connect", joinRooms);
+
+		// If the socket is already connected (shared Manager), join immediately
+		if (socket.connected) joinRooms();
 
 		socket.on("ticket", data => {
 			if (data.action === "updateUnread") {
