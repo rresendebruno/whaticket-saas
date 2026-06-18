@@ -270,9 +270,9 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
       const lng = payload.location.longitude;
       body = `https://maps.google.com/maps?q=${lat},${lng}`;
       msgType = "location";
-    } else if (payload.contact?.vcard) {
-      // Single contact card with full vCard string
-      body = payload.contact.vcard;
+    } else if (payload.contact?.vCard || payload.contact?.vcard) {
+      // Single contact card with full vCard string (Z-API uses capital C: vCard)
+      body = payload.contact.vCard || payload.contact.vcard;
       msgType = "vcard";
     } else if (payload.contactName && payload.contactPhone) {
       // Z-API simple format: contactName + contactPhone (mirrors send-contact API)
