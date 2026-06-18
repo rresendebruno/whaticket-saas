@@ -19,10 +19,14 @@ import ClearIcon from "@material-ui/icons/Clear";
 import MicIcon from "@material-ui/icons/Mic";
 import CheckCircleOutlineIcon from "@material-ui/icons/CheckCircleOutline";
 import HighlightOffIcon from "@material-ui/icons/HighlightOff";
+import InsertDriveFileIcon from "@material-ui/icons/InsertDriveFile";
+import AddIcon from "@material-ui/icons/Add";
+import CloudUploadIcon from "@material-ui/icons/CloudUpload";
 import {
   Hidden,
   Menu,
   MenuItem,
+  Typography,
 } from "@material-ui/core";
 import ClickAwayListener from "@material-ui/core/ClickAwayListener";
 
@@ -94,16 +98,174 @@ const useStyles = makeStyles(theme => ({
     display: "none",
   },
 
+  // --- Media preview area ---
   viewMediaInputWrapper: {
     display: "flex",
-    padding: "10px 13px",
-    position: "relative",
-    justifyContent: "space-between",
-    alignItems: "center",
+    flexDirection: "column",
+    padding: "10px 13px 6px",
     backgroundColor: theme.palette.background.default,
     borderTop: "1px solid rgba(0, 0, 0, 0.12)",
+    width: "100%",
+    boxSizing: "border-box",
   },
 
+  mediaPreviewHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+
+  mediaPreviewTitle: {
+    fontSize: 13,
+    color: theme.palette.type === "dark" ? "#ccc" : "#555",
+  },
+
+  mediaPreviewActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: 4,
+  },
+
+  mediaPreviewGrid: {
+    display: "flex",
+    flexDirection: "row",
+    gap: 8,
+    overflowX: "auto",
+    paddingBottom: 6,
+    "&::-webkit-scrollbar": {
+      height: 4,
+    },
+    "&::-webkit-scrollbar-thumb": {
+      background: "rgba(0,0,0,0.2)",
+      borderRadius: 2,
+    },
+  },
+
+  mediaPreviewCard: {
+    position: "relative",
+    minWidth: 100,
+    width: 100,
+    height: 90,
+    borderRadius: 8,
+    overflow: "hidden",
+    background: theme.palette.type === "dark" ? "#2a2a2a" : "#f0f0f0",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    border: `1px solid ${theme.palette.type === "dark" ? "#444" : "#ddd"}`,
+    flexShrink: 0,
+  },
+
+  mediaPreviewThumb: {
+    width: "100%",
+    height: 70,
+    objectFit: "cover",
+    display: "block",
+  },
+
+  mediaPreviewFileIcon: {
+    fontSize: 36,
+    color: theme.palette.type === "dark" ? "#7ab4f5" : "#1976d2",
+    marginBottom: 4,
+  },
+
+  mediaPreviewName: {
+    fontSize: 10,
+    textAlign: "center",
+    padding: "2px 6px",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    width: "100%",
+    boxSizing: "border-box",
+    color: theme.palette.type === "dark" ? "#ccc" : "#444",
+    lineHeight: "14px",
+  },
+
+  mediaPreviewRemoveBtn: {
+    position: "absolute",
+    top: 3,
+    right: 3,
+    padding: 1,
+    background: "rgba(0,0,0,0.55)",
+    borderRadius: "50%",
+    color: "#fff",
+    cursor: "pointer",
+    lineHeight: 0,
+    border: "none",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    "&:hover": {
+      background: "rgba(200,0,0,0.75)",
+    },
+    "& svg": {
+      fontSize: 13,
+    },
+  },
+
+  mediaPreviewAddCard: {
+    minWidth: 100,
+    width: 100,
+    height: 90,
+    borderRadius: 8,
+    border: `2px dashed ${theme.palette.type === "dark" ? "#555" : "#bbb"}`,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    cursor: "pointer",
+    color: theme.palette.type === "dark" ? "#888" : "#aaa",
+    flexShrink: 0,
+    background: "transparent",
+    transition: "border-color 0.15s, color 0.15s",
+    "&:hover": {
+      borderColor: theme.palette.primary.main,
+      color: theme.palette.primary.main,
+    },
+  },
+
+  // --- Drag overlay ---
+  dragOverlay: {
+    position: "fixed",
+    inset: 0,
+    zIndex: 9999,
+    background: "rgba(25, 118, 210, 0.12)",
+    backdropFilter: "blur(2px)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    pointerEvents: "none",
+  },
+
+  dragOverlayBox: {
+    border: "3px dashed #1976d2",
+    borderRadius: 20,
+    padding: "36px 72px",
+    background: theme.palette.type === "dark"
+      ? "rgba(30,30,30,0.92)"
+      : "rgba(255,255,255,0.92)",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 12,
+    boxShadow: "0 4px 32px rgba(0,0,0,0.18)",
+  },
+
+  dragOverlayIcon: {
+    fontSize: 52,
+    color: "#1976d2",
+  },
+
+  dragOverlayText: {
+    fontSize: 18,
+    fontWeight: 600,
+    color: "#1976d2",
+  },
+
+  // --- Existing styles ---
   emojiBox: {
     position: "absolute",
     bottom: 63,
@@ -184,6 +346,7 @@ const useStyles = makeStyles(theme => ({
     color: "#6bcbef",
     fontWeight: 500,
   },
+
   messageQuickAnswersWrapper: {
     margin: 0,
     position: "absolute",
@@ -215,19 +378,77 @@ const MessageInput = ({ ticketStatus }) => {
   const { ticketId } = useParams();
 
   const [medias, setMedias] = useState([]);
+  const [previews, setPreviews] = useState([]);
   const [inputMessage, setInputMessage] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
   const [loading, setLoading] = useState(false);
   const [recording, setRecording] = useState(false);
   const [quickAnswers, setQuickAnswer] = useState([]);
   const [typeBar, setTypeBar] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounterRef = useRef(0);
+  const addMoreInputRef = useRef(null);
   const inputRef = useRef();
   const [anchorEl, setAnchorEl] = useState(null);
-  const { setReplyingMessage, replyingMessage } =
-    useContext(ReplyMessageContext);
+  const { setReplyingMessage, replyingMessage } = useContext(ReplyMessageContext);
   const { user } = useContext(AuthContext);
 
   const signMessage = true;
+
+  // Generate/revoke object URL previews whenever medias changes
+  useEffect(() => {
+    const urls = medias.map(file =>
+      file.type.startsWith("image/") ? URL.createObjectURL(file) : null
+    );
+    setPreviews(urls);
+    return () => {
+      urls.forEach(url => url && URL.revokeObjectURL(url));
+    };
+  }, [medias]);
+
+  // Window-level drag-and-drop so any drag over the page shows the overlay
+  useEffect(() => {
+    if (ticketStatus !== "open") return;
+
+    const onDragEnter = e => {
+      dragCounterRef.current++;
+      if (e.dataTransfer?.types?.includes("Files")) setIsDragging(true);
+    };
+
+    const onDragLeave = () => {
+      dragCounterRef.current--;
+      if (dragCounterRef.current <= 0) {
+        dragCounterRef.current = 0;
+        setIsDragging(false);
+      }
+    };
+
+    const onDragOver = e => {
+      e.preventDefault();
+    };
+
+    const onDrop = e => {
+      e.preventDefault();
+      dragCounterRef.current = 0;
+      setIsDragging(false);
+      if (e.dataTransfer?.files?.length > 0) {
+        const dropped = Array.from(e.dataTransfer.files);
+        setMedias(prev => [...prev, ...dropped]);
+      }
+    };
+
+    window.addEventListener("dragenter", onDragEnter);
+    window.addEventListener("dragleave", onDragLeave);
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("drop", onDrop);
+
+    return () => {
+      window.removeEventListener("dragenter", onDragEnter);
+      window.removeEventListener("dragleave", onDragLeave);
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("drop", onDrop);
+    };
+  }, [ticketStatus]);
 
   useEffect(() => {
     inputRef.current.focus();
@@ -259,18 +480,29 @@ const MessageInput = ({ ticketStatus }) => {
   };
 
   const handleChangeMedias = e => {
-    if (!e.target.files) {
-      return;
-    }
-
-    const selectedMedias = Array.from(e.target.files);
-    setMedias(selectedMedias);
+    if (!e.target.files) return;
+    const selected = Array.from(e.target.files);
+    setMedias(selected);
+    e.target.value = "";
   };
 
+  const handleAddMoreMedias = e => {
+    if (!e.target.files) return;
+    const added = Array.from(e.target.files);
+    setMedias(prev => [...prev, ...added]);
+    e.target.value = "";
+  };
+
+  // Support pasting multiple files (e.g. Ctrl+V screenshots or copied files)
   const handleInputPaste = e => {
-    if (e.clipboardData.files[0]) {
-      setMedias([e.clipboardData.files[0]]);
+    if (e.clipboardData.files.length > 0) {
+      const pasted = Array.from(e.clipboardData.files);
+      setMedias(prev => [...prev, ...pasted]);
     }
+  };
+
+  const handleRemoveMedia = index => {
+    setMedias(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleUploadMedia = async e => {
@@ -323,9 +555,7 @@ const MessageInput = ({ ticketStatus }) => {
     setLoading(true);
     try {
       const recorder = await initRecorder();
-      if (!recorder) {
-        throw new Error("Recorder not available");
-      }
+      if (!recorder) throw new Error("Recorder not available");
       await navigator.mediaDevices.getUserMedia({ audio: true });
       await recorder.start();
       setRecording(true);
@@ -360,9 +590,7 @@ const MessageInput = ({ ticketStatus }) => {
     setLoading(true);
     try {
       const recorder = await initRecorder();
-      if (!recorder) {
-        throw new Error("Recorder not available");
-      }
+      if (!recorder) throw new Error("Recorder not available");
       const [, blob] = await recorder.stop().getMp3();
       if (blob.size < 10000) {
         setLoading(false);
@@ -388,9 +616,7 @@ const MessageInput = ({ ticketStatus }) => {
   const handleCancelAudio = async () => {
     try {
       const recorder = await initRecorder();
-      if (recorder) {
-        await recorder.stop().getMp3();
-      }
+      if (recorder) await recorder.stop().getMp3();
       setRecording(false);
     } catch (err) {
       toastError(err);
@@ -401,7 +627,7 @@ const MessageInput = ({ ticketStatus }) => {
     setAnchorEl(event.currentTarget);
   };
 
-  const handleMenuItemClick = event => {
+  const handleMenuItemClick = () => {
     setAnchorEl(null);
   };
 
@@ -435,39 +661,114 @@ const MessageInput = ({ ticketStatus }) => {
     );
   };
 
+  // --- File preview grid shown when medias are queued ---
   if (medias.length > 0)
     return (
-      <Paper elevation={0} square className={classes.viewMediaInputWrapper}>
-        <IconButton
-          aria-label="cancel-upload"
-          component="span"
-          onClick={e => setMedias([])}
-        >
-          <CancelIcon className={classes.sendMessageIcons} />
-        </IconButton>
-
-        {loading ? (
-          <div>
-            <CircularProgress className={classes.circleLoading} />
+      <>
+        {isDragging && (
+          <div className={classes.dragOverlay}>
+            <div className={classes.dragOverlayBox}>
+              <CloudUploadIcon className={classes.dragOverlayIcon} />
+              <Typography className={classes.dragOverlayText}>
+                Solte os arquivos aqui
+              </Typography>
+            </div>
           </div>
-        ) : (
-          <span>
-            {medias[0]?.name}
-            {/* <img src={media.preview} alt=""></img> */}
-          </span>
         )}
-        <IconButton
-          aria-label="send-upload"
-          component="span"
-          onClick={handleUploadMedia}
-          disabled={loading}
-        >
-          <SendIcon className={classes.sendMessageIcons} />
-        </IconButton>
-      </Paper>
+
+        {/* Hidden input for "add more files" */}
+        <input
+          multiple
+          type="file"
+          ref={addMoreInputRef}
+          className={classes.uploadInput}
+          onChange={handleAddMoreMedias}
+        />
+
+        <Paper elevation={0} square className={classes.viewMediaInputWrapper}>
+          <div className={classes.mediaPreviewHeader}>
+            <Typography className={classes.mediaPreviewTitle}>
+              {medias.length === 1
+                ? "1 arquivo selecionado"
+                : `${medias.length} arquivos selecionados`}
+            </Typography>
+            <div className={classes.mediaPreviewActions}>
+              <IconButton
+                size="small"
+                aria-label="cancel-upload"
+                onClick={() => setMedias([])}
+                disabled={loading}
+              >
+                <CancelIcon className={classes.sendMessageIcons} />
+              </IconButton>
+              <IconButton
+                size="small"
+                aria-label="send-upload"
+                onClick={handleUploadMedia}
+                disabled={loading}
+              >
+                {loading ? (
+                  <CircularProgress size={20} style={{ color: green[500] }} />
+                ) : (
+                  <SendIcon style={{ color: green[600] }} />
+                )}
+              </IconButton>
+            </div>
+          </div>
+
+          <div className={classes.mediaPreviewGrid}>
+            {medias.map((file, index) => (
+              <div key={index} className={classes.mediaPreviewCard}>
+                {previews[index] ? (
+                  <img
+                    src={previews[index]}
+                    alt={file.name}
+                    className={classes.mediaPreviewThumb}
+                  />
+                ) : (
+                  <InsertDriveFileIcon className={classes.mediaPreviewFileIcon} />
+                )}
+                <span className={classes.mediaPreviewName} title={file.name}>
+                  {file.name}
+                </span>
+                <button
+                  className={classes.mediaPreviewRemoveBtn}
+                  onClick={() => handleRemoveMedia(index)}
+                  disabled={loading}
+                >
+                  <ClearIcon />
+                </button>
+              </div>
+            ))}
+
+            {/* Add more card */}
+            <div
+              className={classes.mediaPreviewAddCard}
+              onClick={() => !loading && addMoreInputRef.current?.click()}
+              title="Adicionar mais arquivos"
+            >
+              <AddIcon style={{ fontSize: 28 }} />
+              <span style={{ fontSize: 11, marginTop: 2 }}>Adicionar</span>
+            </div>
+          </div>
+        </Paper>
+      </>
     );
-  else {
-    return (
+
+  return (
+    <>
+      {/* Full-screen drag overlay */}
+      {isDragging && (
+        <div className={classes.dragOverlay}>
+          <div className={classes.dragOverlayBox}>
+            <CloudUploadIcon className={classes.dragOverlayIcon} />
+            <Typography className={classes.dragOverlayText}>
+              Solte os arquivos aqui
+            </Typography>
+          </div>
+        </div>
+      )}
+
       <Paper square elevation={0} className={classes.mainWrapper}>
         {replyingMessage && renderReplyingMessage(replyingMessage)}
         <div className={classes.newMessageBox}>
@@ -482,7 +783,7 @@ const MessageInput = ({ ticketStatus }) => {
             </IconButton>
             {showEmoji ? (
               <div className={classes.emojiBox}>
-                <ClickAwayListener onClickAway={e => setShowEmoji(false)}>
+                <ClickAwayListener onClickAway={() => setShowEmoji(false)}>
                   <Picker
                     perLine={16}
                     showPreview={false}
@@ -511,13 +812,14 @@ const MessageInput = ({ ticketStatus }) => {
               </IconButton>
             </label>
           </Hidden>
+
           <Hidden only={["md", "lg", "xl"]}>
             <IconButton
               aria-controls="simple-menu"
               aria-haspopup="true"
               onClick={handleOpenMenuClick}
             >
-              <MoreVert></MoreVert>
+              <MoreVert />
             </IconButton>
             <Menu
               id="simple-menu"
@@ -540,12 +842,12 @@ const MessageInput = ({ ticketStatus }) => {
                 <input
                   multiple
                   type="file"
-                  id="upload-button"
+                  id="upload-button-mobile"
                   disabled={loading || recording || ticketStatus !== "open"}
                   className={classes.uploadInput}
                   onChange={handleChangeMedias}
                 />
-                <label htmlFor="upload-button">
+                <label htmlFor="upload-button-mobile">
                   <IconButton
                     aria-label="upload"
                     component="span"
@@ -557,6 +859,7 @@ const MessageInput = ({ ticketStatus }) => {
               </MenuItem>
             </Menu>
           </Hidden>
+
           <div className={classes.messageInputWrapper}>
             <InputBase
               inputRef={input => {
@@ -604,6 +907,7 @@ const MessageInput = ({ ticketStatus }) => {
               <div></div>
             )}
           </div>
+
           {inputMessage ? (
             <IconButton
               aria-label="sendMessage"
@@ -631,7 +935,6 @@ const MessageInput = ({ ticketStatus }) => {
               ) : (
                 <RecordingTimer />
               )}
-
               <IconButton
                 aria-label="sendRecordedAudio"
                 component="span"
@@ -653,8 +956,8 @@ const MessageInput = ({ ticketStatus }) => {
           )}
         </div>
       </Paper>
-    );
-  }
+    </>
+  );
 };
 
 export default MessageInput;
