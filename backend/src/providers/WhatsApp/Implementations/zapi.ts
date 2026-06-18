@@ -106,6 +106,7 @@ const init = async (whatsapp: Whatsapp): Promise<void> => {
       await zapiPut("/update-webhook-message-ack", { value: msgWebhook }).catch(() => {});
       // Connection events
       await zapiPut("/update-webhook-disconnected", { value: statusWebhook });
+      await zapiPut("/update-webhook-connected", { value: statusWebhook }).catch(() => {});
       logger.info(`Z-API webhooks set: msgWebhook=${msgWebhook}`);
     } catch (err) {
       logger.warn({ msg: "Could not set Z-API webhooks", err });

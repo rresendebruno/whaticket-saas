@@ -357,9 +357,14 @@ router.post("/zapi/webhook-status/:whatsappId", async (req: Request, res: Respon
     const io = getIO();
 
     const isConnected =
-      payload.connected === true || payload.type === "connected";
+      payload.connected === true ||
+      payload.type === "connected" ||
+      payload.type === "ConnectionSuccessCallback" ||
+      payload.type === "ReadyCallback";
     const isDisconnected =
-      payload.connected === false || payload.type === "disconnected";
+      payload.connected === false ||
+      payload.type === "disconnected" ||
+      payload.type === "DisconnectedCallback";
 
     if (isConnected) {
       await whatsapp.update({ status: "CONNECTED", qrcode: "", retries: 0 });
