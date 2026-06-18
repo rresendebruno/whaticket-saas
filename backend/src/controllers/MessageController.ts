@@ -152,10 +152,15 @@ export const forward = async (
     sticker: "[Figurinha]",
     location: "[Localização]"
   };
-  const msgContent =
-    sourceMessage.body && sourceMessage.body.trim()
-      ? sourceMessage.body.trim()
-      : mediaLabels[sourceMessage.mediaType] || "[Mídia]";
+  const isMediaType = Object.keys(mediaLabels).includes(sourceMessage.mediaType);
+  const rawBody = sourceMessage.body?.trim() || "";
+  // When body is just a stored filename (no spaces, has file extension) treat as no caption
+  const isFilename = isMediaType && rawBody.length > 0 && !/\s/.test(rawBody) && /\.[a-z0-9]{2,5}$/i.test(rawBody);
+  const caption = isFilename ? "" : rawBody;
+  const mediaLabel = mediaLabels[sourceMessage.mediaType];
+  const msgContent = mediaLabel
+    ? caption ? `${mediaLabel} — ${caption}` : mediaLabel
+    : caption || "[Mensagem]";
 
   const ts = Date.now();
 
