@@ -3,11 +3,15 @@ import axios from "axios";
 import { join } from "path";
 import { promisify } from "util";
 import { writeFile } from "fs";
+import { Op } from "sequelize";
 
 import { logger } from "../utils/logger";
 import Whatsapp from "../models/Whatsapp";
+import Contact from "../models/Contact";
+import Ticket from "../models/Ticket";
 import { getIO } from "../libs/socket";
 import normalizeBrazilianPhone from "../helpers/normalizeBrazilianPhone";
+import CreateMessageService from "../services/MessageServices/CreateMessageService";
 import {
   handleMessage,
   handleMessageAck,
@@ -150,6 +154,75 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
         await handleMessageAck(payload.messageId, ack);
         return;
       }
+    }
+
+    // --- Incoming call notification ---
+    // Z-API fires this when the connected WhatsApp number receives a voice/video call
+    const isCallEvent =
+      payload.type === "ReceivedCallCallback" ||
+      payload.type === "CallReceivedCallback" ||
+      payload.type === "IncomingCallCallback";
+
+    if (isCallEvent) {
+      logger.info({ msg: "Z-API incoming call webhook", payload });
+
+      const rawPhone = String(payload.phone || "")
+        .replace(/@c\.us|@s\.whatsapp\.net/g, "")
+        .replace(/\D/g, "");
+      const phone = normalizeBrazilianPhone(rawPhone);
+
+      if (phone) {
+        // Find the contact — try exact match first, then without 9th digit
+        let contact = await Contact.findOne({ where: { number: phone } });
+        if (!contact && phone.length === 13) {
+          // Try without the leading 9 (e.g. 5562985... → 556285...)
+          const alt = phone.slice(0, 4) + phone.slice(5);
+          contact = await Contact.findOne({ where: { number: alt } });
+        }
+
+        if (contact) {
+          // Find the most recent open or pending ticket for this contact
+          const ticket = await Ticket.findOne({
+            where: {
+              contactId: contact.id,
+              whatsappId,
+              status: { [Op.in]: ["open", "pending"] }
+            },
+            order: [["updatedAt", "DESC"]]
+          });
+
+          if (ticket) {
+            const callType = payload.isVideo ? "vídeo chamada" : "chamada de voz";
+            const noteBody = `📞 *${contact.name}* realizou uma ${callType} que não foi atendida.`;
+
+            const note = await CreateMessageService({
+              messageData: {
+                id: `call-in-${payload.callId || Date.now()}`,
+                ticketId: ticket.id,
+                body: noteBody,
+                fromMe: false,
+                read: false,
+                mediaType: "note",
+                ack: 3
+              }
+            });
+
+            getIO().to(ticket.id.toString()).emit("appMessage", {
+              action: "create",
+              message: note,
+              ticket
+            });
+
+            logger.info({ msg: "Incoming call note saved", ticketId: ticket.id, contact: contact.name });
+          } else {
+            logger.info({ msg: "Incoming call: no open ticket for contact", contactId: contact.id });
+          }
+        } else {
+          logger.info({ msg: "Incoming call: contact not found", phone });
+        }
+      }
+
+      return;
     }
 
     // Skip messages sent by our backend API (already saved by SendWhatsAppMessage)
