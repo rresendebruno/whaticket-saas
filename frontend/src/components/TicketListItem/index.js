@@ -22,6 +22,7 @@ import MarkdownWrapper from "../MarkdownWrapper";
 import { Tooltip } from "@material-ui/core";
 import { AuthContext } from "../../context/Auth/AuthContext";
 import toastError from "../../errors/toastError";
+import AcceptTicketWithQueueModal from "../AcceptTicketWithQueueModal";
 
 const useStyles = makeStyles(theme => ({
 	ticket: {
@@ -120,6 +121,7 @@ const TicketListItem = ({ ticket }) => {
 	const classes = useStyles();
 	const history = useHistory();
 	const [loading, setLoading] = useState(false);
+	const [acceptModalOpen, setAcceptModalOpen] = useState(false);
 	const { ticketId } = useParams();
 	const isMounted = useRef(true);
 	const { user } = useContext(AuthContext);
@@ -130,21 +132,37 @@ const TicketListItem = ({ ticket }) => {
 		};
 	}, []);
 
-	const handleAcepptTicket = async id => {
+	const handleAcepptTicket = async (id, queueId) => {
 		setLoading(true);
 		try {
 			await api.put(`/tickets/${id}`, {
 				status: "open",
 				userId: user?.id,
+				...(queueId ? { queueId } : {}),
 			});
 		} catch (err) {
 			setLoading(false);
 			toastError(err);
+			return;
 		}
 		if (isMounted.current) {
 			setLoading(false);
 		}
 		history.push(`/tickets/${id}`);
+	};
+
+	const handleClickAccept = e => {
+		e.stopPropagation();
+		if (!ticket.queueId) {
+			setAcceptModalOpen(true);
+		} else {
+			handleAcepptTicket(ticket.id);
+		}
+	};
+
+	const handleAcceptWithQueue = async queueId => {
+		await handleAcepptTicket(ticket.id, queueId);
+		if (isMounted.current) setAcceptModalOpen(false);
 	};
 
 	const handleSelectTicket = id => {
@@ -249,13 +267,19 @@ const TicketListItem = ({ ticket }) => {
 						className={classes.acceptButton}
 						size="small"
 						loading={loading}
-						onClick={e => handleAcepptTicket(ticket.id)}
+						onClick={handleClickAccept}
 					>
 						{i18n.t("ticketsList.buttons.accept")}
 					</ButtonWithSpinner>
 				)}
 			</ListItem>
 			<Divider variant="inset" component="li" />
+			<AcceptTicketWithQueueModal
+				open={acceptModalOpen}
+				onClose={() => setAcceptModalOpen(false)}
+				onConfirm={handleAcceptWithQueue}
+				loading={loading}
+			/>
 		</React.Fragment>
 	);
 };
