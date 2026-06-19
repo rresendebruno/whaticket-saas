@@ -185,16 +185,15 @@ const reducer = (state, action) => {
 		const socket = openSocket();
 
 		const shouldUpdateTicket = ticket => !searchParam &&
-			// Group tickets are always visible regardless of queue membership
+			// Group tickets bypass the user-assignment check (no need to be assigned)
+			// but still respect the explicit queue filter the user set
 			(ticket.isGroup ||
 			 !ticket.userId || ticket.userId === user?.id || showAll ||
 			 (ticket.queueId && selectedQueueIds.indexOf(ticket.queueId) > -1)) &&
-			(ticket.isGroup ||
-			 !ticket.queueId || selectedQueueIds.indexOf(ticket.queueId) > -1);
+			// All tickets (including groups) must respect the queue filter
+			(!ticket.queueId || selectedQueueIds.indexOf(ticket.queueId) > -1);
 
 		const notBelongsToUserQueues = ticket =>
-			// Never remove group tickets from the list
-			!ticket.isGroup &&
 			ticket.queueId && selectedQueueIds.indexOf(ticket.queueId) === -1;
 
 		const joinRooms = () => {
