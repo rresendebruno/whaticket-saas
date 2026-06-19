@@ -11,6 +11,7 @@ import TicketOptionsMenu from "../TicketOptionsMenu";
 import ButtonWithSpinner from "../ButtonWithSpinner";
 import toastError from "../../errors/toastError";
 import { AuthContext } from "../../context/Auth/AuthContext";
+import AcceptTicketWithQueueModal from "../AcceptTicketWithQueueModal";
 
 const useStyles = makeStyles(theme => ({
 	actionButtons: {
@@ -29,6 +30,7 @@ const TicketActionButtons = ({ ticket }) => {
 	const history = useHistory();
 	const [anchorEl, setAnchorEl] = useState(null);
 	const [loading, setLoading] = useState(false);
+	const [acceptModalOpen, setAcceptModalOpen] = useState(false);
 	const ticketOptionsMenuOpen = Boolean(anchorEl);
 	const { user } = useContext(AuthContext);
 
@@ -38,6 +40,32 @@ const TicketActionButtons = ({ ticket }) => {
 
 	const handleCloseTicketOptionsMenu = e => {
 		setAnchorEl(null);
+	};
+
+	const handleAcceptTicket = e => {
+		// If the ticket has no queue yet (client didn't choose via chatbot),
+		// force the agent to pick one before accepting
+		if (!ticket.queueId) {
+			setAcceptModalOpen(true);
+			return;
+		}
+		handleUpdateTicketStatus(e, "open", user?.id);
+	};
+
+	const handleAcceptWithQueue = async queueId => {
+		setLoading(true);
+		try {
+			await api.put(`/tickets/${ticket.id}`, {
+				status: "open",
+				userId: user?.id,
+				queueId,
+			});
+			setAcceptModalOpen(false);
+			history.push(`/tickets/${ticket.id}`);
+		} catch (err) {
+			toastError(err);
+		}
+		setLoading(false);
 	};
 
 	const handleUpdateTicketStatus = async (e, status, userId) => {
@@ -61,6 +89,7 @@ const TicketActionButtons = ({ ticket }) => {
 	};
 
 	return (
+		<>
 		<div className={classes.actionButtons}>
 			{ticket.status === "closed" && (
 				<ButtonWithSpinner
@@ -108,12 +137,20 @@ const TicketActionButtons = ({ ticket }) => {
 					size="small"
 					variant="contained"
 					color="primary"
-					onClick={e => handleUpdateTicketStatus(e, "open", user?.id)}
+					onClick={handleAcceptTicket}
 				>
 					{i18n.t("messagesList.header.buttons.accept")}
 				</ButtonWithSpinner>
 			)}
 		</div>
+
+		<AcceptTicketWithQueueModal
+			open={acceptModalOpen}
+			onClose={() => setAcceptModalOpen(false)}
+			onConfirm={handleAcceptWithQueue}
+			loading={loading}
+		/>
+		</>
 	);
 };
 
