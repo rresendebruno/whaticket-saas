@@ -43,6 +43,8 @@ const AuthUserService = async ({
     throw new AppError("ERR_INVALID_CREDENTIALS", 401);
   }
 
+  await user.update({ lastLogin: new Date() });
+
   const token = createAccessToken(user);
   const refreshToken = createRefreshToken(user);
 

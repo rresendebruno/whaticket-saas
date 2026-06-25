@@ -97,11 +97,31 @@ const TicketsManager = () => {
   const visibleQueues = (user.queues || []).filter(q => !q.isGroupQueue);
   const groupQueueIds = (user.queues || []).filter(q => q.isGroupQueue).map(q => q.id);
   const userQueueIds = visibleQueues.map((q) => q.id);
-  // Group queue IDs are always included so their tickets appear without UI chips
-  const [selectedQueueIds, setSelectedQueueIds] = useState([...userQueueIds, ...groupQueueIds]);
+
+  // Persiste o filtro de filas por usuário no localStorage
+  const QUEUE_STORAGE_KEY = `queueFilter_${user.id}`;
+
+  const [selectedQueueIds, setSelectedQueueIds] = useState(() => {
+    try {
+      const saved = localStorage.getItem(QUEUE_STORAGE_KEY);
+      if (saved !== null) {
+        const savedIds = JSON.parse(saved);
+        // Sempre inclui filas de grupo (não aparecem no filtro visual)
+        return [...new Set([...savedIds, ...groupQueueIds])];
+      }
+    } catch {}
+    // Padrão: todas as filas selecionadas
+    return [...userQueueIds, ...groupQueueIds];
+  });
+
+  const handleQueueChange = (values) => {
+    const newIds = [...new Set([...values, ...groupQueueIds])];
+    setSelectedQueueIds(newIds);
+    localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(values));
+  };
 
   useEffect(() => {
-    if (user.profile.toUpperCase() === "ADMIN") {
+    if (user.profile.toUpperCase() === "ADMIN" || user.profile === "supervisor") {
       setShowAllTickets(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -229,7 +249,7 @@ const TicketsManager = () => {
           style={{ marginLeft: 6 }}
           selectedQueueIds={selectedQueueIds}
           userQueues={visibleQueues}
-          onChange={(values) => setSelectedQueueIds([...values, ...groupQueueIds])}
+          onChange={handleQueueChange}
         />
       </Paper>
       <TabPanel value={tab} name="open" className={classes.ticketsWrapper}>

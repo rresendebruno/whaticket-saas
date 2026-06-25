@@ -107,7 +107,7 @@ export const supervisor = async (req: Request, res: Response): Promise<Response>
   const [queues, users, pendingTickets, openTickets] = await Promise.all([
     Queue.findAll({ where: queueWhere, order: [["name", "ASC"]] }),
     User.findAll({
-      attributes: ["id", "name"],
+      attributes: ["id", "name", "lastLogin"],
       include: [{ model: Queue, as: "queues", attributes: ["id"], through: { attributes: [] } }]
     }),
     Ticket.findAll({ attributes: ["id", "queueId", "userId"], where: { status: "pending", ...ticketWhere } as any }),
@@ -124,6 +124,7 @@ export const supervisor = async (req: Request, res: Response): Promise<Response>
       .map(u => ({
         id: u.id,
         name: u.name,
+        lastLogin: u.lastLogin || null,
         isOnline: onlineIds.includes(String(u.id)),
         openTickets: openTickets.filter(t => t.userId === u.id && t.queueId === queue.id).length
       }));
