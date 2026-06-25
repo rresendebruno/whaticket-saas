@@ -378,6 +378,12 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
     // Z-API embeds LID/phone digits directly in the body as "@DIGITS" — it does NOT send a
     // separate "mentioned" array. Scan the body for all @\d+ tokens and resolve each one:
     // try by LID first, then by phone number (normalized).
+    // Also detect self-mention: if the resolved contact's number matches connectedPhone,
+    // the business itself was mentioned — we'll emit a groupMention alert after saving.
+    let selfMentioned = false;
+    const connectedPhoneNorm = normalizeBrazilianPhone(
+      (payload.connectedPhone || "").replace(/\D/g, "")
+    );
     if (body && isGroup) {
       const mentionTokens = body.match(/@(\d{8,})/g);
       if (mentionTokens) {
@@ -393,6 +399,14 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
             if (resolved) {
               body = body.split(token).join(`@${resolved.name}`);
               logger.info({ msg: "Mention resolved", digits, name: resolved.name });
+              // Check if this mention is the business's own number
+              if (
+                connectedPhoneNorm &&
+                (resolved.number === connectedPhoneNorm ||
+                  resolved.lid === digits)
+              ) {
+                selfMentioned = true;
+              }
             } else {
               logger.warn({ msg: "Mention: no contact found", digits });
             }
@@ -440,6 +454,30 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
     }
 
     await handleMessage(messagePayload, contactPayload, contextPayload, mediaPayload);
+
+    // After saving, emit a mention alert if the business was mentioned in the group
+    if (selfMentioned && isGroup && groupPhone) {
+      try {
+        const groupContact = await Contact.findOne({ where: { number: groupPhone } });
+        if (groupContact) {
+          const ticket = await Ticket.findOne({
+            where: { contactId: groupContact.id },
+            order: [["updatedAt", "DESC"]]
+          });
+          if (ticket) {
+            getIO().emit("groupMention", {
+              ticketId: ticket.id,
+              groupName: payload.chatName || groupPhone,
+              senderName,
+              body
+            });
+            logger.info({ msg: "Group self-mention alert emitted", ticketId: ticket.id, groupName: payload.chatName });
+          }
+        }
+      } catch (err) {
+        logger.warn({ msg: "groupMention alert error", err });
+      }
+    }
   } catch (err) {
     logger.error({ msg: "Z-API webhook processing error", err });
   }

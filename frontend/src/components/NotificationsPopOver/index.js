@@ -3,6 +3,7 @@ import { useHistory } from "react-router-dom";
 import { format } from "date-fns";
 import openSocket from "../../services/socket-io";
 import useSound from "use-sound";
+import { toast } from "react-toastify";
 
 import Popover from "@material-ui/core/Popover";
 import IconButton from "@material-ui/core/IconButton";
@@ -107,6 +108,20 @@ const NotificationsPopOver = () => {
 					return prevState;
 				});
 			}
+		});
+
+		socket.on("groupMention", data => {
+			soundAlertRef.current();
+			toast.warning(
+				`📢 Você foi mencionado em "${data.groupName}" por ${data.senderName}`,
+				{
+					autoClose: 10000,
+					onClick: () => {
+						historyRef.current.push(`/tickets/${data.ticketId}`);
+					},
+					style: { cursor: "pointer" },
+				}
+			);
 		});
 
 		socket.on("appMessage", data => {
