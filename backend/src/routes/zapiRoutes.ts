@@ -384,10 +384,8 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
     const connectedPhoneNorm = normalizeBrazilianPhone(
       (payload.connectedPhone || "").replace(/\D/g, "")
     );
-    logger.info({ msg: "Mention check start", isGroup, body, connectedPhoneNorm });
     if (body && isGroup) {
       const mentionTokens = body.match(/@(\d{8,})/g);
-      logger.info({ msg: "Mention tokens", mentionTokens });
       if (mentionTokens) {
         for (const token of mentionTokens) {
           const digits = token.slice(1);
@@ -398,16 +396,10 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
               resolved = await Contact.findOne({ where: { number: normalized } })
                 || await Contact.findOne({ where: { number: digits } });
             }
-            logger.info({ msg: "Mention lookup", digits, resolvedId: resolved?.id, resolvedNumber: resolved?.number, resolvedLid: resolved?.lid, connectedPhoneNorm });
             if (resolved) {
               body = body.split(token).join(`@${resolved.name}`);
-              if (
-                connectedPhoneNorm &&
-                (resolved.number === connectedPhoneNorm ||
-                  resolved.lid === digits)
-              ) {
+              if (connectedPhoneNorm && resolved.number === connectedPhoneNorm) {
                 selfMentioned = true;
-                logger.info({ msg: "Self-mention detected!", digits, name: resolved.name });
               }
             } else {
               logger.warn({ msg: "Mention: no contact found", digits });
@@ -458,17 +450,14 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
     await handleMessage(messagePayload, contactPayload, contextPayload, mediaPayload);
 
     // After saving, emit a mention alert if the business was mentioned in the group
-    logger.info({ msg: "Post-handleMessage check", selfMentioned, isGroup, groupPhone });
     if (selfMentioned && isGroup && groupPhone) {
       try {
         const groupContact = await Contact.findOne({ where: { number: groupPhone } });
-        logger.info({ msg: "groupMention: groupContact lookup", groupPhone, found: !!groupContact });
         if (groupContact) {
           const ticket = await Ticket.findOne({
             where: { contactId: groupContact.id },
             order: [["updatedAt", "DESC"]]
           });
-          logger.info({ msg: "groupMention: ticket lookup", ticketId: ticket?.id });
           if (ticket) {
             getIO().emit("groupMention", {
               ticketId: ticket.id,
@@ -476,7 +465,7 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
               senderName,
               body
             });
-            logger.info({ msg: "groupMention emitted OK", ticketId: ticket.id });
+            logger.info({ msg: "groupMention emitted", ticketId: ticket.id, groupName: payload.chatName });
           }
         }
       } catch (err) {
