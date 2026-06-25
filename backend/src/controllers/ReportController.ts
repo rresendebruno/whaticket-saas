@@ -6,6 +6,7 @@ import Ticket from "../models/Ticket";
 import User from "../models/User";
 import Queue from "../models/Queue";
 import sequelize from "../database";
+import { getOnlineUserIds } from "../libs/socket";
 
 const getRange = (dateStart?: string, dateEnd?: string) => ({
   start: dateStart ? startOfDay(parseISO(dateStart)) : startOfDay(new Date()),
@@ -113,6 +114,8 @@ export const supervisor = async (req: Request, res: Response): Promise<Response>
     Ticket.findAll({ attributes: ["id", "queueId", "userId"], where: { status: "open", ...ticketWhere } as any })
   ]);
 
+  const onlineIds = getOnlineUserIds();
+
   const queueData = queues.map(queue => {
     const qPending = pendingTickets.filter(t => t.queueId === queue.id).length;
     const qOpen = openTickets.filter(t => t.queueId === queue.id).length;
@@ -121,6 +124,7 @@ export const supervisor = async (req: Request, res: Response): Promise<Response>
       .map(u => ({
         id: u.id,
         name: u.name,
+        isOnline: onlineIds.includes(String(u.id)),
         openTickets: openTickets.filter(t => t.userId === u.id && t.queueId === queue.id).length
       }));
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useContext } from "react";
 import { format } from "date-fns";
 
 import Container from "@material-ui/core/Container";
@@ -14,11 +14,12 @@ import CircularProgress from "@material-ui/core/CircularProgress";
 import { makeStyles } from "@material-ui/core/styles";
 
 import RefreshIcon from "@material-ui/icons/Refresh";
-import PersonIcon from "@material-ui/icons/Person";
 import HourglassEmptyIcon from "@material-ui/icons/HourglassEmpty";
 import ChatBubbleOutlineIcon from "@material-ui/icons/ChatBubbleOutline";
 
 import api from "../../services/api";
+import openSocket from "../../services/socket-io";
+import { AuthContext } from "../../context/Auth/AuthContext";
 
 const REFRESH_INTERVAL = 30000;
 
@@ -49,50 +50,61 @@ const useStyles = makeStyles(theme => ({
   },
   queueName: { fontWeight: 700, fontSize: "1rem" },
   counters: { display: "flex", gap: theme.spacing(1), marginBottom: theme.spacing(2) },
-  agentDivider: { marginBottom: theme.spacing(1.5) },
+  agentDivider: { marginBottom: theme.spacing(1) },
   agentRow: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: "4px 0",
+    padding: "5px 0",
   },
   agentLeft: { display: "flex", alignItems: "center", gap: theme.spacing(1) },
+  avatarWrap: { position: "relative", display: "inline-flex" },
   agentAvatar: {
-    width: 28,
-    height: 28,
+    width: 30,
+    height: 30,
     fontSize: "0.75rem",
     backgroundColor: theme.palette.primary.light,
+  },
+  onlineDot: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    width: 9,
+    height: 9,
+    borderRadius: "50%",
+    border: "1.5px solid #fff",
   },
   agentName: { fontSize: "0.85rem" },
   emptyAgents: {
     fontSize: "0.8rem",
     color: theme.palette.text.disabled,
     fontStyle: "italic",
+    marginTop: 4,
   },
-  noQueueCard: {
-    borderTopColor: "#9e9e9e !important",
+  onlineCount: {
+    fontSize: "0.75rem",
+    color: theme.palette.text.secondary,
+    marginBottom: theme.spacing(1),
   },
 }));
 
 const initials = name =>
-  name
-    .split(" ")
-    .slice(0, 2)
-    .map(w => w[0])
-    .join("")
-    .toUpperCase();
+  name.split(" ").slice(0, 2).map(w => w[0]).join("").toUpperCase();
 
-const QueueCard = ({ queue, classes }) => {
+const QueueCard = ({ queue, onlineIds, classes }) => {
   const color = queue.color || "#9e9e9e";
+  const onlineAgents = (queue.agents || []).filter(a => onlineIds.has(String(a.id))).length;
+
   return (
     <Paper
-      className={`${classes.queueCard} ${!queue.color ? classes.noQueueCard : ""}`}
+      className={classes.queueCard}
       style={{ borderTopColor: color }}
       elevation={2}
     >
       <div className={classes.queueHeader}>
         <Typography className={classes.queueName}>{queue.name}</Typography>
       </div>
+
       <div className={classes.counters}>
         <Tooltip title="Aguardando">
           <Chip
@@ -125,33 +137,51 @@ const QueueCard = ({ queue, classes }) => {
       {queue.agents && queue.agents.length > 0 && (
         <>
           <Divider className={classes.agentDivider} />
-          <Typography
-            variant="caption"
-            style={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}
-          >
-            Agentes
+          <Typography variant="caption" className={classes.onlineCount}>
+            Agentes — <span style={{ color: "#43a047" }}>{onlineAgents} online</span>
+            {" / "}{queue.agents.length} total
           </Typography>
-          {queue.agents.map(agent => (
-            <div key={agent.id} className={classes.agentRow}>
-              <div className={classes.agentLeft}>
-                <Avatar className={classes.agentAvatar}>{initials(agent.name)}</Avatar>
-                <Typography className={classes.agentName}>{agent.name}</Typography>
+          {queue.agents.map(agent => {
+            const isOnline = onlineIds.has(String(agent.id));
+            return (
+              <div key={agent.id} className={classes.agentRow}>
+                <div className={classes.agentLeft}>
+                  <div className={classes.avatarWrap}>
+                    <Avatar
+                      className={classes.agentAvatar}
+                      style={{ opacity: isOnline ? 1 : 0.45 }}
+                    >
+                      {initials(agent.name)}
+                    </Avatar>
+                    <span
+                      className={classes.onlineDot}
+                      style={{ background: isOnline ? "#43a047" : "#bdbdbd" }}
+                    />
+                  </div>
+                  <Typography
+                    className={classes.agentName}
+                    style={{ color: isOnline ? "inherit" : "#9e9e9e" }}
+                  >
+                    {agent.name}
+                  </Typography>
+                </div>
+                <Tooltip title="Tickets em atendimento">
+                  <Chip
+                    size="small"
+                    label={agent.openTickets}
+                    style={{
+                      minWidth: 28,
+                      height: 20,
+                      fontSize: "0.72rem",
+                      fontWeight: 700,
+                      background: agent.openTickets > 0 ? "#1976d2" : "#e0e0e0",
+                      color: agent.openTickets > 0 ? "#fff" : "#757575",
+                    }}
+                  />
+                </Tooltip>
               </div>
-              <Chip
-                size="small"
-                label={agent.openTickets}
-                title="Tickets abertos"
-                style={{
-                  minWidth: 28,
-                  height: 20,
-                  fontSize: "0.72rem",
-                  fontWeight: 700,
-                  background: agent.openTickets > 0 ? "#1976d2" : "#e0e0e0",
-                  color: agent.openTickets > 0 ? "#fff" : "#757575",
-                }}
-              />
-            </div>
-          ))}
+            );
+          })}
         </>
       )}
       {queue.agents && queue.agents.length === 0 && (
@@ -166,9 +196,12 @@ const QueueCard = ({ queue, classes }) => {
 
 const Supervisor = () => {
   const classes = useStyles();
+  const { user } = useContext(AuthContext);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
+  // Set de userIds online (strings)
+  const [onlineIds, setOnlineIds] = useState(new Set());
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -176,6 +209,12 @@ const Supervisor = () => {
       const { data: result } = await api.get("/reports/supervisor");
       setData(result);
       setLastUpdated(new Date());
+      // Inicializa o Set de online com o que veio da API
+      const initial = new Set();
+      result.queues.forEach(q =>
+        q.agents.forEach(a => { if (a.isOnline) initial.add(String(a.id)); })
+      );
+      setOnlineIds(initial);
     } catch (e) {
       console.error(e);
     } finally {
@@ -183,11 +222,31 @@ const Supervisor = () => {
     }
   }, []);
 
+  // Refresh automático
   useEffect(() => {
     fetchData();
     const timer = setInterval(fetchData, REFRESH_INTERVAL);
     return () => clearInterval(timer);
   }, [fetchData]);
+
+  // Socket: atualiza online/offline em tempo real sem precisar de refresh
+  useEffect(() => {
+    const socket = openSocket();
+
+    socket.on("userOnline", ({ userId }) => {
+      setOnlineIds(prev => new Set([...prev, String(userId)]));
+    });
+
+    socket.on("userOffline", ({ userId }) => {
+      setOnlineIds(prev => {
+        const next = new Set(prev);
+        next.delete(String(userId));
+        return next;
+      });
+    });
+
+    return () => { socket.disconnect(); };
+  }, [user]);
 
   const totalPending = data
     ? data.queues.reduce((s, q) => s + q.pending, 0) + data.noQueue.pending
@@ -195,6 +254,7 @@ const Supervisor = () => {
   const totalOpen = data
     ? data.queues.reduce((s, q) => s + q.open, 0) + data.noQueue.open
     : 0;
+  const totalOnline = onlineIds.size;
 
   return (
     <Container maxWidth="lg" className={classes.container}>
@@ -211,6 +271,11 @@ const Supervisor = () => {
           )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <Chip
+            size="small"
+            label={`${totalOnline} online`}
+            style={{ background: "#43a04722", color: "#43a047", fontWeight: 700, border: "1px solid #43a04744" }}
+          />
           <Chip
             icon={<HourglassEmptyIcon />}
             label={`${totalPending} aguardando`}
@@ -231,14 +296,10 @@ const Supervisor = () => {
         </div>
       </div>
 
-      {!data && !loading && (
-        <Typography color="textSecondary">Carregando dados...</Typography>
-      )}
-
       <Grid container spacing={3}>
         {data?.queues.map(queue => (
           <Grid item xs={12} sm={6} md={4} key={queue.id}>
-            <QueueCard queue={queue} classes={classes} />
+            <QueueCard queue={queue} onlineIds={onlineIds} classes={classes} />
           </Grid>
         ))}
 
@@ -252,6 +313,7 @@ const Supervisor = () => {
                 open: data.noQueue.open,
                 agents: []
               }}
+              onlineIds={onlineIds}
               classes={classes}
             />
           </Grid>

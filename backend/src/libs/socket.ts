@@ -7,6 +7,12 @@ import authConfig from "../config/auth";
 
 let io: SocketIO;
 
+// socketId → userId (string). Um usuário pode ter múltiplas abas abertas.
+const onlineSockets = new Map<string, string>();
+
+export const getOnlineUserIds = (): string[] =>
+  Array.from(new Set(onlineSockets.values()));
+
 export const initIO = (httpServer: Server): SocketIO => {
   const allowedOrigin = process.env.FRONTEND_URL;
 
@@ -47,6 +53,15 @@ export const initIO = (httpServer: Server): SocketIO => {
     }
 
     logger.info("Client Connected");
+
+    // Registra o usuário como online e notifica supervisores
+    const userId = String((tokenData as any).id);
+    const wasAlreadyOnline = Array.from(onlineSockets.values()).includes(userId);
+    onlineSockets.set(socket.id, userId);
+    if (!wasAlreadyOnline) {
+      io.emit("userOnline", { userId });
+    }
+
     socket.on("joinChatBox", (ticketId: string) => {
       logger.info("A client joined a ticket channel");
       socket.join(ticketId);
@@ -64,6 +79,12 @@ export const initIO = (httpServer: Server): SocketIO => {
 
     socket.on("disconnect", () => {
       logger.info("Client disconnected");
+      const uid = onlineSockets.get(socket.id);
+      onlineSockets.delete(socket.id);
+      // Só emite offline se o usuário não tem outras abas abertas
+      if (uid && !Array.from(onlineSockets.values()).includes(uid)) {
+        io.emit("userOffline", { userId: uid });
+      }
     });
 
     return socket;
