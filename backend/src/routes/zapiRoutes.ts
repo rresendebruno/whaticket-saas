@@ -374,6 +374,34 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
       return;
     }
 
+    // Resolve @mentions in group messages: Z-API sends "mentioned" as array of JIDs
+    // (e.g. "165785905430532@lid" or "5511999887766@s.whatsapp.net").
+    // Replace @DIGITS in the body with @ContactName so agents see real names.
+    if (body && isGroup) {
+      const mentioned: string[] = payload.text?.mentioned || payload.mentioned || [];
+      for (const jid of mentioned) {
+        try {
+          let mentionedContact: Contact | null = null;
+          if (jid.endsWith("@lid")) {
+            const lidDigits = jid.replace(/@lid$/, "");
+            mentionedContact = await Contact.findOne({ where: { lid: lidDigits } });
+            if (mentionedContact && body.includes(`@${lidDigits}`)) {
+              body = body.split(`@${lidDigits}`).join(`@${mentionedContact.name}`);
+            }
+          } else {
+            const phoneDigits = jid.replace(/@[^@]+$/, "").replace(/\D/g, "");
+            const normalizedPhone = normalizeBrazilianPhone(phoneDigits);
+            mentionedContact = await Contact.findOne({ where: { number: normalizedPhone } });
+            if (mentionedContact && body.includes(`@${phoneDigits}`)) {
+              body = body.split(`@${phoneDigits}`).join(`@${mentionedContact.name}`);
+            }
+          }
+        } catch {
+          // Non-critical — skip mention resolution on error
+        }
+      }
+    }
+
     const timestamp = payload.momment
       ? Math.floor(payload.momment / 1000)
       : Math.floor(Date.now() / 1000);

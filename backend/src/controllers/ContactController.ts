@@ -32,6 +32,7 @@ interface ExtraInfo {
 interface ContactData {
   name: string;
   number: string;
+  lid?: string;
   email?: string;
   extraInfo?: ExtraInfo[];
 }

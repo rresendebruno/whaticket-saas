@@ -69,6 +69,7 @@ const ContactModal = ({ open, onClose, contactId, initialValues, onSave }) => {
 		name: "",
 		number: "",
 		email: "",
+		lid: "",
 		isGroup: false,
 	};
 
@@ -186,6 +187,20 @@ const ContactModal = ({ open, onClose, contactId, initialValues, onSave }) => {
 										variant="outlined"
 									/>
 								</div>
+								{!values.isGroup && (
+									<div>
+										<Field
+											as={TextField}
+											label="WhatsApp LID"
+											name="lid"
+											placeholder="Ex: 165785905430532"
+											fullWidth
+											margin="dense"
+											variant="outlined"
+											helperText="Preenchido automaticamente quando o contato enviar uma mensagem"
+										/>
+									</div>
+								)}
 								<Typography
 									style={{ marginBottom: 8, marginTop: 12 }}
 									variant="subtitle1"
