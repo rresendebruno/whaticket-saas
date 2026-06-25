@@ -74,6 +74,7 @@ const MainListItems = (props) => {
 
   return (
     <div onClick={drawerClose}>
+      {/* Dashboard: visível para admin e supervisor */}
       <Can
         role={user.profile}
         perform="drawer-admin-items:view"
@@ -85,6 +86,19 @@ const MainListItems = (props) => {
           />
         )}
       />
+      <Can
+        role={user.profile}
+        perform="drawer-supervisor-items:view"
+        yes={() => (
+          <ListItemLink
+            to="/"
+            primary="Dashboard"
+            icon={<DashboardOutlinedIcon />}
+          />
+        )}
+      />
+
+      {/* Conexões: somente admin */}
       <Can
         role={user.profile}
         perform="drawer-admin-items:view"
@@ -100,6 +114,7 @@ const MainListItems = (props) => {
           />
         )}
       />
+
       <ListItemLink
         to="/tickets"
         primary={i18n.t("mainDrawer.listItems.tickets")}
@@ -110,6 +125,8 @@ const MainListItems = (props) => {
         primary={i18n.t("mainDrawer.listItems.contacts")}
         icon={<ContactPhoneOutlinedIcon />}
       />
+
+      {/* Respostas rápidas: admin e supervisor */}
       <Can
         role={user.profile}
         perform="drawer-admin-items:view"
@@ -121,6 +138,36 @@ const MainListItems = (props) => {
           />
         )}
       />
+      <Can
+        role={user.profile}
+        perform="drawer-supervisor-items:view"
+        yes={() => (
+          <ListItemLink
+            to="/quickAnswers"
+            primary={i18n.t("mainDrawer.listItems.quickAnswers")}
+            icon={<QuestionAnswerOutlinedIcon />}
+          />
+        )}
+      />
+
+      {/* Seção supervisor: somente perfil supervisor */}
+      <Can
+        role={user.profile}
+        perform="drawer-supervisor-items:view"
+        yes={() => (
+          <>
+            <Divider />
+            <ListSubheader inset>Supervisão</ListSubheader>
+            <ListItemLink
+              to="/supervisor"
+              primary="Supervisor de Filas"
+              icon={<SupervisorAccountIcon />}
+            />
+          </>
+        )}
+      />
+
+      {/* Seção admin completa */}
       <Can
         role={user.profile}
         perform="drawer-admin-items:view"

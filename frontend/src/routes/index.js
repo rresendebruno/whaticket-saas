@@ -30,7 +30,7 @@ const Routes = () => {
             <Route exact path="/signup" component={Signup} />
             <WhatsAppsProvider>
               <LoggedInLayout>
-                <Route exact path="/" component={Dashboard} isPrivate roles={["admin"]} />
+                <Route exact path="/" component={Dashboard} isPrivate roles={["admin", "supervisor"]} />
                 <Route exact path="/tickets/:ticketId?" component={Tickets} isPrivate />
                 <Route exact path="/connections" component={Connections} isPrivate roles={["admin"]} />
                 <Route exact path="/contacts" component={Contacts} isPrivate />
@@ -39,7 +39,7 @@ const Routes = () => {
                 <Route exact path="/Settings" component={Settings} isPrivate roles={["admin"]} />
                 <Route exact path="/Queues" component={Queues} isPrivate roles={["admin"]} />
                 <Route exact path="/chatbot" component={Chatbot} isPrivate roles={["admin"]} />
-                <Route exact path="/supervisor" component={Supervisor} isPrivate roles={["admin"]} />
+                <Route exact path="/supervisor" component={Supervisor} isPrivate roles={["admin", "supervisor"]} />
               </LoggedInLayout>
             </WhatsAppsProvider>
           </Switch>

@@ -3,6 +3,14 @@ const rules = {
 		static: [],
 	},
 
+	supervisor: {
+		static: [
+			"drawer-supervisor-items:view",
+			"tickets-manager:showall",
+			"ticket-options:transferWhatsapp",
+		],
+	},
+
 	admin: {
 		static: [
 			"drawer-admin-items:view",
