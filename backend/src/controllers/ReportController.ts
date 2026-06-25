@@ -14,9 +14,22 @@ const getRange = (dateStart?: string, dateEnd?: string) => ({
 
 export const overview = async (req: Request, res: Response): Promise<Response> => {
   const { dateStart, dateEnd, queueIds } = req.query as Record<string, string>;
+  const { id: userId, profile } = req.user;
   const { start, end } = getRange(dateStart, dateEnd);
 
-  const parsedQueueIds: number[] = queueIds ? JSON.parse(queueIds) : [];
+  let parsedQueueIds: number[] = queueIds ? JSON.parse(queueIds) : [];
+
+  // Supervisor só vê as filas às quais pertence; o filtro manual não pode escapar disso
+  if (profile === "supervisor") {
+    const self = await User.findByPk(userId, {
+      include: [{ model: Queue, as: "queues", attributes: ["id"], through: { attributes: [] } }]
+    });
+    const supervisorQueueIds: number[] = ((self as any)?.queues || []).map((q: any) => q.id);
+    parsedQueueIds = parsedQueueIds.length
+      ? parsedQueueIds.filter(id => supervisorQueueIds.includes(id))
+      : supervisorQueueIds;
+  }
+
   const queueWhere = parsedQueueIds.length
     ? { queueId: { [Op.in]: parsedQueueIds } }
     : {};
@@ -63,14 +76,34 @@ export const overview = async (req: Request, res: Response): Promise<Response> =
 };
 
 export const supervisor = async (req: Request, res: Response): Promise<Response> => {
+  const { id: userId, profile } = req.user;
+
+  // Se for supervisor, busca apenas as filas às quais está atribuído
+  let allowedQueueIds: number[] | null = null;
+  if (profile === "supervisor") {
+    const self = await User.findByPk(userId, {
+      include: [{ model: Queue, as: "queues", attributes: ["id"], through: { attributes: [] } }]
+    });
+    allowedQueueIds = ((self as any)?.queues || []).map((q: any) => q.id);
+    if (allowedQueueIds.length === 0) {
+      return res.json({ queues: [], noQueue: { pending: 0, open: 0 } });
+    }
+  }
+
+  const queueWhere: any = { isGroupQueue: false };
+  if (allowedQueueIds) queueWhere.id = { [Op.in]: allowedQueueIds };
+
+  const ticketQueueWhere: any = {};
+  if (allowedQueueIds) ticketQueueWhere.queueId = { [Op.in]: allowedQueueIds };
+
   const [queues, users, pendingTickets, openTickets] = await Promise.all([
-    Queue.findAll({ where: { isGroupQueue: false }, order: [["name", "ASC"]] }),
+    Queue.findAll({ where: queueWhere, order: [["name", "ASC"]] }),
     User.findAll({
       attributes: ["id", "name"],
       include: [{ model: Queue, as: "queues", attributes: ["id"], through: { attributes: [] } }]
     }),
-    Ticket.findAll({ attributes: ["id", "queueId", "userId"], where: { status: "pending" } }),
-    Ticket.findAll({ attributes: ["id", "queueId", "userId"], where: { status: "open" } })
+    Ticket.findAll({ attributes: ["id", "queueId", "userId"], where: { status: "pending", ...ticketQueueWhere } }),
+    Ticket.findAll({ attributes: ["id", "queueId", "userId"], where: { status: "open", ...ticketQueueWhere } })
   ]);
 
   const queueData = queues.map(queue => {
@@ -87,11 +120,13 @@ export const supervisor = async (req: Request, res: Response): Promise<Response>
     return { id: queue.id, name: queue.name, color: queue.color, pending: qPending, open: qOpen, agents };
   });
 
-  return res.json({
-    queues: queueData,
-    noQueue: {
-      pending: pendingTickets.filter(t => !t.queueId).length,
-      open: openTickets.filter(t => !t.queueId).length
-    }
-  });
+  // "Sem fila" só aparece para admin (supervisor vê apenas suas filas)
+  const noQueue = profile === "admin"
+    ? {
+        pending: pendingTickets.filter(t => !t.queueId).length,
+        open: openTickets.filter(t => !t.queueId).length
+      }
+    : { pending: 0, open: 0 };
+
+  return res.json({ queues: queueData, noQueue });
 };
