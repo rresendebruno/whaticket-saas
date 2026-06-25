@@ -3,6 +3,7 @@ import React, { useState, useEffect, useReducer, useRef } from "react";
 import { isSameDay, parseISO, format } from "date-fns";
 import openSocket from "../../services/socket-io";
 import clsx from "clsx";
+import { withToken } from "../../utils/mediaUrl";
 
 import { green } from "@material-ui/core/colors";
 import {
@@ -574,12 +575,12 @@ const MessagesList = ({ ticketId, isGroup }) => {
     else if (message.mediaType === "image") {
       return <ModalImageCors imageUrl={message.mediaUrl} />;
     } else if (message.mediaType === "audio") {
-      return <Audio url={message.mediaUrl} />
+      return <Audio url={withToken(message.mediaUrl)} />
     } else if (message.mediaType === "video") {
       return (
         <video
           className={classes.messageMedia}
-          src={message.mediaUrl}
+          src={withToken(message.mediaUrl)}
           controls
         />
       );
@@ -592,7 +593,7 @@ const MessagesList = ({ ticketId, isGroup }) => {
               color="primary"
               variant="outlined"
               target="_blank"
-              href={message.mediaUrl}
+              href={withToken(message.mediaUrl)}
               download={message.body || true}
             >
               Download

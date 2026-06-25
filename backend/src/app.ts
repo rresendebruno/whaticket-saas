@@ -5,6 +5,7 @@ import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import * as Sentry from "@sentry/node";
+import jwt from "jsonwebtoken";
 
 import "./database";
 import uploadConfig from "./config/upload";
@@ -30,7 +31,20 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
   logger.info(`${req.method} ${req.path} origin=${req.headers.origin || "-"}`);
   next();
 });
-app.use("/public", express.static(uploadConfig.directory));
+app.use("/public", (req: Request, res: Response, next: NextFunction) => {
+  // Accept token from query param (native <audio>/<video>/<a href>) or Authorization header (Axios/fetch)
+  const queryToken = req.query.token as string | undefined;
+  const authHeader = req.headers.authorization;
+  const headerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined;
+  const token = queryToken || headerToken;
+  if (!token) return res.sendStatus(401);
+  try {
+    jwt.verify(token, process.env.JWT_SECRET as string);
+    next();
+  } catch {
+    res.sendStatus(403);
+  }
+}, express.static(uploadConfig.directory));
 app.use(zapiRoutes); // public — no auth, called by Z-API
 app.use(routes);
 
