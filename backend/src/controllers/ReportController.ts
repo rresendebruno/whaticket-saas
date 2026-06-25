@@ -12,6 +12,9 @@ const getRange = (dateStart?: string, dateEnd?: string) => ({
   end: dateEnd ? endOfDay(parseISO(dateEnd)) : endOfDay(new Date())
 });
 
+const buildQueueWhere = (queueIds: number[]): any =>
+  queueIds.length ? { queueId: { [Op.in]: queueIds } } : {};
+
 export const overview = async (req: Request, res: Response): Promise<Response> => {
   const { dateStart, dateEnd, queueIds } = req.query as Record<string, string>;
   const { id: userId, profile } = req.user;
@@ -19,26 +22,27 @@ export const overview = async (req: Request, res: Response): Promise<Response> =
 
   let parsedQueueIds: number[] = queueIds ? JSON.parse(queueIds) : [];
 
-  // Supervisor só vê as filas às quais pertence; o filtro manual não pode escapar disso
   if (profile === "supervisor") {
     const self = await User.findByPk(userId, {
       include: [{ model: Queue, as: "queues", attributes: ["id"], through: { attributes: [] } }]
     });
-    const supervisorQueueIds: number[] = ((self as any)?.queues || []).map((q: any) => q.id);
+    const supervisorIds: number[] = ((self as any)?.queues || []).map((q: any) => Number(q.id));
     parsedQueueIds = parsedQueueIds.length
-      ? parsedQueueIds.filter(id => supervisorQueueIds.includes(id))
-      : supervisorQueueIds;
+      ? parsedQueueIds.filter(id => supervisorIds.includes(id))
+      : supervisorIds;
   }
 
-  const queueWhere = parsedQueueIds.length
-    ? { queueId: { [Op.in]: parsedQueueIds } }
-    : {};
+  const queueWhere = buildQueueWhere(parsedQueueIds);
 
   const [open, pending, closed, avgRows, byHour] = await Promise.all([
-    Ticket.count({ where: { status: "open", ...queueWhere } }),
-    Ticket.count({ where: { status: "pending", ...queueWhere } }),
+    Ticket.count({ where: { status: "open", ...queueWhere } as any }),
+    Ticket.count({ where: { status: "pending", ...queueWhere } as any }),
     Ticket.count({
-      where: { status: "closed", updatedAt: { [Op.between]: [start, end] }, ...queueWhere }
+      where: {
+        status: "closed",
+        updatedAt: { [Op.between]: [start.getTime(), end.getTime()] },
+        ...queueWhere
+      } as any
     }),
     sequelize.query(
       `SELECT AVG(TIMESTAMPDIFF(SECOND, createdAt, updatedAt)) AS avgSeconds
@@ -78,23 +82,26 @@ export const overview = async (req: Request, res: Response): Promise<Response> =
 export const supervisor = async (req: Request, res: Response): Promise<Response> => {
   const { id: userId, profile } = req.user;
 
-  // Se for supervisor, busca apenas as filas às quais está atribuído
-  let allowedQueueIds: number[] | null = null;
+  let allowedQueueIds: number[] = [];
+  let isSupervisor = false;
+
   if (profile === "supervisor") {
+    isSupervisor = true;
     const self = await User.findByPk(userId, {
       include: [{ model: Queue, as: "queues", attributes: ["id"], through: { attributes: [] } }]
     });
-    allowedQueueIds = ((self as any)?.queues || []).map((q: any) => q.id);
+    allowedQueueIds = ((self as any)?.queues || []).map((q: any) => Number(q.id));
     if (allowedQueueIds.length === 0) {
       return res.json({ queues: [], noQueue: { pending: 0, open: 0 } });
     }
   }
 
   const queueWhere: any = { isGroupQueue: false };
-  if (allowedQueueIds) queueWhere.id = { [Op.in]: allowedQueueIds };
+  if (isSupervisor) queueWhere.id = { [Op.in]: allowedQueueIds };
 
-  const ticketQueueWhere: any = {};
-  if (allowedQueueIds) ticketQueueWhere.queueId = { [Op.in]: allowedQueueIds };
+  const ticketWhere: any = isSupervisor
+    ? { queueId: { [Op.in]: allowedQueueIds } }
+    : {};
 
   const [queues, users, pendingTickets, openTickets] = await Promise.all([
     Queue.findAll({ where: queueWhere, order: [["name", "ASC"]] }),
@@ -102,8 +109,8 @@ export const supervisor = async (req: Request, res: Response): Promise<Response>
       attributes: ["id", "name"],
       include: [{ model: Queue, as: "queues", attributes: ["id"], through: { attributes: [] } }]
     }),
-    Ticket.findAll({ attributes: ["id", "queueId", "userId"], where: { status: "pending", ...ticketQueueWhere } }),
-    Ticket.findAll({ attributes: ["id", "queueId", "userId"], where: { status: "open", ...ticketQueueWhere } })
+    Ticket.findAll({ attributes: ["id", "queueId", "userId"], where: { status: "pending", ...ticketWhere } as any }),
+    Ticket.findAll({ attributes: ["id", "queueId", "userId"], where: { status: "open", ...ticketWhere } as any })
   ]);
 
   const queueData = queues.map(queue => {
@@ -120,8 +127,7 @@ export const supervisor = async (req: Request, res: Response): Promise<Response>
     return { id: queue.id, name: queue.name, color: queue.color, pending: qPending, open: qOpen, agents };
   });
 
-  // "Sem fila" só aparece para admin (supervisor vê apenas suas filas)
-  const noQueue = profile === "admin"
+  const noQueue = !isSupervisor
     ? {
         pending: pendingTickets.filter(t => !t.queueId).length,
         open: openTickets.filter(t => !t.queueId).length
