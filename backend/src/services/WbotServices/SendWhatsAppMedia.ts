@@ -1,4 +1,3 @@
-import fs from "fs";
 import AppError from "../../errors/AppError";
 import Ticket from "../../models/Ticket";
 import { whatsappProvider, ProviderMessage } from "../../providers/WhatsApp";
@@ -68,8 +67,6 @@ const SendWhatsAppMedia = async ({
         ack: 1
       }
     });
-
-    fs.unlinkSync(media.path);
 
     return sentMessage;
   } catch (err: any) {
