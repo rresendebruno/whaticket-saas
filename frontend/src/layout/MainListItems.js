@@ -16,6 +16,7 @@ import ContactPhoneOutlinedIcon from "@material-ui/icons/ContactPhoneOutlined";
 import AccountTreeOutlinedIcon from "@material-ui/icons/AccountTreeOutlined";
 import QuestionAnswerOutlinedIcon from "@material-ui/icons/QuestionAnswerOutlined";
 import SmartToyOutlinedIcon from "@material-ui/icons/Android";
+import SupervisorAccountIcon from "@material-ui/icons/SupervisorAccount";
 
 import { i18n } from "../translate/i18n";
 import { WhatsAppsContext } from "../context/WhatsApp/WhatsAppsContext";
@@ -138,6 +139,11 @@ const MainListItems = (props) => {
               to="/queues"
               primary={i18n.t("mainDrawer.listItems.queues")}
               icon={<AccountTreeOutlinedIcon />}
+            />
+            <ListItemLink
+              to="/supervisor"
+              primary="Supervisor de Filas"
+              icon={<SupervisorAccountIcon />}
             />
             <ListItemLink
               to="/chatbot"

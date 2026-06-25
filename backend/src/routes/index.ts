@@ -12,6 +12,7 @@ import queueRoutes from "./queueRoutes";
 import quickAnswerRoutes from "./quickAnswerRoutes";
 import apiRoutes from "./apiRoutes";
 import chatbotRoutes from "./chatbotRoutes";
+import reportRoutes from "./reportRoutes";
 
 const routes = Router();
 
@@ -27,5 +28,6 @@ routes.use(queueRoutes);
 routes.use(quickAnswerRoutes);
 routes.use("/api/messages", apiRoutes);
 routes.use(chatbotRoutes);
+routes.use(reportRoutes);
 
 export default routes;

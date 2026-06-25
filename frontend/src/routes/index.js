@@ -14,6 +14,7 @@ import Contacts from "../pages/Contacts/";
 import QuickAnswers from "../pages/QuickAnswers/";
 import Queues from "../pages/Queues/";
 import Chatbot from "../pages/Chatbot/";
+import Supervisor from "../pages/Supervisor/";
 import { AuthProvider } from "../context/Auth/AuthContext";
 import { WhatsAppsProvider } from "../context/WhatsApp/WhatsAppsContext";
 import { ThemeProvider } from "../context/DarkMode";
@@ -38,6 +39,7 @@ const Routes = () => {
                 <Route exact path="/Settings" component={Settings} isPrivate roles={["admin"]} />
                 <Route exact path="/Queues" component={Queues} isPrivate roles={["admin"]} />
                 <Route exact path="/chatbot" component={Chatbot} isPrivate roles={["admin"]} />
+                <Route exact path="/supervisor" component={Supervisor} isPrivate roles={["admin"]} />
               </LoggedInLayout>
             </WhatsAppsProvider>
           </Switch>
