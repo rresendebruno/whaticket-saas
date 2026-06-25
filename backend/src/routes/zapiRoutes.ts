@@ -61,17 +61,6 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
       const { text: _t, image: _i, audio: _a, video: _v, document: _d, sticker: _s, ...meta } = payload;
       logger.info({ msg: "Z-API webhook IN", ...meta });
     }
-    // Log mention-related fields specifically (text is stripped above)
-    if (payload.text || payload.mentionedList || payload.mentioned) {
-      logger.info({
-        msg: "Z-API mention debug",
-        textMessage: payload.text?.message,
-        textMentioned: payload.text?.mentioned,
-        rootMentioned: payload.mentioned,
-        mentionedList: payload.mentionedList,
-        mentionedJidList: payload.mentionedJidList,
-      });
-    }
 
     // Handle message revoke (client deleted their own message)
     if (payload.isRevoked === true || payload.type === "REVOKE") {
@@ -385,48 +374,31 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
       return;
     }
 
-    // Resolve @mentions in group messages: Z-API sends the list under several possible keys.
-    // Replace @DIGITS in the body with @ContactName so agents see real names.
+    // Resolve @mentions in group messages.
+    // Z-API embeds LID/phone digits directly in the body as "@DIGITS" — it does NOT send a
+    // separate "mentioned" array. Scan the body for all @\d+ tokens and resolve each one:
+    // try by LID first, then by phone number (normalized).
     if (body && isGroup) {
-      const mentioned: string[] = (
-        payload.text?.mentioned ||
-        payload.text?.mentionedJidList ||
-        payload.mentioned ||
-        payload.mentionedList ||
-        payload.mentionedJidList ||
-        []
-      );
-      logger.info({ msg: "Z-API mention resolution", mentionedCount: mentioned.length, mentioned, body });
-      for (const jid of mentioned) {
-        try {
-          if (jid.endsWith("@lid")) {
-            const lidDigits = jid.replace(/@lid$/, "");
-            const mentionedContact = await Contact.findOne({ where: { lid: lidDigits } });
-            if (mentionedContact) {
-              body = body.split(`@${lidDigits}`).join(`@${mentionedContact.name}`);
-              logger.info({ msg: "Mention resolved (LID)", lid: lidDigits, name: mentionedContact.name });
-            } else {
-              logger.warn({ msg: "Mention: LID not found in contacts", lid: lidDigits });
+      const mentionTokens = body.match(/@(\d{8,})/g);
+      if (mentionTokens) {
+        for (const token of mentionTokens) {
+          const digits = token.slice(1); // strip the @
+          try {
+            let resolved: Contact | null = await Contact.findOne({ where: { lid: digits } });
+            if (!resolved) {
+              const normalized = normalizeBrazilianPhone(digits);
+              resolved = await Contact.findOne({ where: { number: normalized } })
+                || await Contact.findOne({ where: { number: digits } });
             }
-          } else {
-            const phoneDigits = jid.replace(/@[^@]+$/, "").replace(/\D/g, "");
-            if (!phoneDigits) continue;
-            const normalizedPhone = normalizeBrazilianPhone(phoneDigits);
-            const mentionedContact = await Contact.findOne({ where: { number: normalizedPhone } })
-              || await Contact.findOne({ where: { number: phoneDigits } });
-            if (mentionedContact) {
-              // Try both the raw digits and normalized form in the body
-              body = body.split(`@${phoneDigits}`).join(`@${mentionedContact.name}`);
-              if (normalizedPhone !== phoneDigits) {
-                body = body.split(`@${normalizedPhone}`).join(`@${mentionedContact.name}`);
-              }
-              logger.info({ msg: "Mention resolved (phone)", phone: normalizedPhone, name: mentionedContact.name });
+            if (resolved) {
+              body = body.split(token).join(`@${resolved.name}`);
+              logger.info({ msg: "Mention resolved", digits, name: resolved.name });
             } else {
-              logger.warn({ msg: "Mention: phone not found in contacts", phoneDigits, normalizedPhone });
+              logger.warn({ msg: "Mention: no contact found", digits });
             }
+          } catch (err) {
+            logger.warn({ msg: "Mention resolution error", digits, err });
           }
-        } catch (err) {
-          logger.warn({ msg: "Mention resolution error", jid, err });
         }
       }
     }
