@@ -75,22 +75,44 @@ export const groupMembers = async (req: Request, res: Response): Promise<Respons
     return res.json({ members: [] });
   }
 
+  // DB fallback: participants who already sent messages in this ticket
+  const dbMessages = await Message.findAll({
+    where: { ticketId: ticket.id, fromMe: false } as any,
+    include: [{ model: Contact, as: "contact", attributes: ["id", "name", "number"] }],
+    attributes: ["contactId"]
+  });
+  const seen = new Set<number>();
+  const dbMembers = dbMessages
+    .filter(m => (m as any).contact?.number && !seen.has((m as any).contactId) && seen.add((m as any).contactId))
+    .map(m => ({ phone: (m as any).contact.number, name: (m as any).contact.name || (m as any).contact.number }));
+
+  // Try Z-API — stored number has no @g.us suffix, so we add it back
   const instanceId = process.env.ZAPI_INSTANCE_ID;
   const token = process.env.ZAPI_TOKEN;
   const clientToken = process.env.ZAPI_CLIENT_TOKEN || "";
-  const groupPhone = ticket.contact.number;
+  const groupPhone = `${ticket.contact.number}@g.us`;
 
   try {
     const { data } = await axios.get(
       `https://api.z-api.io/instances/${instanceId}/token/${token}/group-members/${groupPhone}`,
       { headers: { "Client-Token": clientToken } }
     );
-    const members = Array.isArray(data) ? data : (data?.members || data?.participants || []);
-    return res.json({ members });
+    const zapiMembers: any[] = Array.isArray(data) ? data : (data?.members || data?.participants || []);
+
+    if (zapiMembers.length > 0) {
+      // Merge Z-API list with DB names where available
+      const dbByPhone = new Map(dbMembers.map(m => [m.phone, m.name]));
+      const merged = zapiMembers.map(m => ({
+        phone: String(m.phone || m.id || "").replace(/@.+$/, "").replace(/\D/g, ""),
+        name: dbByPhone.get(String(m.phone || "").replace(/\D/g, "")) || m.name || m.pushName || m.phone || ""
+      })).filter(m => m.phone);
+      return res.json({ members: merged });
+    }
   } catch (err: any) {
-    logger.error({ msg: "Failed to fetch group members", ticketId, err: err?.response?.data || err?.message });
-    return res.json({ members: [] });
+    logger.warn({ msg: "Z-API group-members failed, using DB fallback", ticketId, err: err?.response?.status });
   }
+
+  return res.json({ members: dbMembers });
 };
 
 export const forward = async (

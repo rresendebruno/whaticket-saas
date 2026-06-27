@@ -191,7 +191,10 @@ const sendMessage = async (
   if (options?.mentionAll) {
     payload.mentionAll = true;
   } else if (options?.mentioned?.length) {
-    payload.mentioned = options.mentioned;
+    // Z-API expects individual phone IDs in "number@c.us" format
+    payload.mentioned = options.mentioned.map(p =>
+      p.includes("@") ? p : `${p}@c.us`
+    );
   }
 
   try {

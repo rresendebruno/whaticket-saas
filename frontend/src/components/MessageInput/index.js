@@ -540,6 +540,14 @@ const MessageInput = ({ ticketStatus, ticket }) => {
     };
   }, [ticketId, setReplyingMessage]);
 
+  // Pré-carrega membros assim que o ticket for identificado como grupo
+  useEffect(() => {
+    if (ticket?.isGroup && ticketId) {
+      fetchGroupMembers();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticket?.isGroup, ticketId]);
+
   const fetchGroupMembers = async () => {
     try {
       const { data } = await api.get(`/messages/${ticketId}/group-members`);
@@ -553,24 +561,23 @@ const MessageInput = ({ ticketStatus, ticket }) => {
     const val = e.target.value;
     setInputMessage(val);
 
-    if (isGroup) {
-      const cursorPos = e.target.selectionStart ?? val.length;
-      const textBeforeCursor = val.slice(0, cursorPos);
-      const atMatch = textBeforeCursor.match(/@([^\s@]*)$/);
+    // Verifica mencao mesmo se ticket ainda nao carregou (isGroup pode ser falsy momentaneamente)
+    const cursorPos = e.target.selectionStart ?? val.length;
+    const textBeforeCursor = val.slice(0, cursorPos);
+    const atMatch = textBeforeCursor.match(/@([^\s@]*)$/);
 
-      if (atMatch) {
-        const search = atMatch[1].toLowerCase();
-        setMentionSearch(search);
-        setMentionAtIndex(textBeforeCursor.lastIndexOf("@"));
-        setShowMentions(true);
-        setTypeBar(false);
-        if (groupMembers.length === 0) {
-          fetchGroupMembers();
-        }
-        return;
-      } else {
-        setShowMentions(false);
+    if (atMatch && (isGroup || groupMembers.length > 0)) {
+      const search = atMatch[1].toLowerCase();
+      setMentionSearch(search);
+      setMentionAtIndex(textBeforeCursor.lastIndexOf("@"));
+      setShowMentions(true);
+      setTypeBar(false);
+      if (groupMembers.length === 0) {
+        fetchGroupMembers();
       }
+      return;
+    } else if (atMatch === null) {
+      setShowMentions(false);
     }
 
     handleLoadQuickAnswer(val);
@@ -1040,7 +1047,7 @@ const MessageInput = ({ ticketStatus, ticket }) => {
             />
 
             {/* Mention dropdown */}
-            {showMentions && isGroup && (showTodosOption || filteredMembers.length > 0) && (
+            {showMentions && (showTodosOption || filteredMembers.length > 0) && (
               <ClickAwayListener onClickAway={() => setShowMentions(false)}>
                 <ul className={classes.mentionListWrapper}>
                   {showTodosOption && (
