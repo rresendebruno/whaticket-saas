@@ -44,6 +44,9 @@ class Contact extends Model<Contact> {
   @Column
   isGroup: boolean;
 
+  @Column
+  autoCloseMinutes: number;
+
   @CreatedAt
   createdAt: Date;
 

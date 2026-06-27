@@ -16,6 +16,10 @@ import Typography from "@material-ui/core/Typography";
 import IconButton from "@material-ui/core/IconButton";
 import DeleteOutlineIcon from "@material-ui/icons/DeleteOutline";
 import CircularProgress from "@material-ui/core/CircularProgress";
+import Select from "@material-ui/core/Select";
+import MenuItem from "@material-ui/core/MenuItem";
+import InputLabel from "@material-ui/core/InputLabel";
+import FormControl from "@material-ui/core/FormControl";
 
 import { i18n } from "../../translate/i18n";
 
@@ -70,6 +74,7 @@ const ContactModal = ({ open, onClose, contactId, initialValues, onSave }) => {
 		number: "",
 		email: "",
 		lid: "",
+		autoCloseMinutes: 0,
 		isGroup: false,
 	};
 
@@ -199,6 +204,28 @@ const ContactModal = ({ open, onClose, contactId, initialValues, onSave }) => {
 											variant="outlined"
 											helperText="Preenchido automaticamente quando o contato enviar uma mensagem"
 										/>
+									</div>
+								)}
+								{!values.isGroup && (
+									<div style={{ marginTop: 8 }}>
+										<FormControl fullWidth margin="dense" variant="outlined">
+											<InputLabel id="auto-close-label">
+												Encerramento automático por inatividade
+											</InputLabel>
+											<Field
+												as={Select}
+												name="autoCloseMinutes"
+												labelId="auto-close-label"
+												label="Encerramento automático por inatividade"
+											>
+												<MenuItem value={0}>Desativado</MenuItem>
+												<MenuItem value={15}>15 minutos</MenuItem>
+												<MenuItem value={30}>30 minutos</MenuItem>
+												<MenuItem value={60}>1 hora</MenuItem>
+												<MenuItem value={120}>2 horas</MenuItem>
+												<MenuItem value={240}>4 horas</MenuItem>
+											</Field>
+										</FormControl>
 									</div>
 								)}
 								<Typography

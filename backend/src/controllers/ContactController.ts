@@ -34,6 +34,7 @@ interface ContactData {
   number: string;
   lid?: string;
   email?: string;
+  autoCloseMinutes?: number | null;
   extraInfo?: ExtraInfo[];
 }
 

@@ -12,6 +12,7 @@ interface ContactData {
   number?: string;
   name?: string;
   lid?: string;
+  autoCloseMinutes?: number | null;
   extraInfo?: ExtraInfo[];
 }
 
@@ -24,7 +25,7 @@ const UpdateContactService = async ({
   contactData,
   contactId
 }: Request): Promise<Contact> => {
-  const { email, name, number, lid, extraInfo } = contactData;
+  const { email, name, number, lid, autoCloseMinutes, extraInfo } = contactData;
 
   const contact = await Contact.findOne({
     where: { id: contactId },
@@ -58,7 +59,10 @@ const UpdateContactService = async ({
     name,
     number,
     email,
-    ...(lid !== undefined ? { lid: lid || null } : {})
+    ...(lid !== undefined ? { lid: lid || null } : {}),
+    ...(autoCloseMinutes !== undefined
+      ? { autoCloseMinutes: autoCloseMinutes || null }
+      : {})
   });
 
   await contact.reload({
