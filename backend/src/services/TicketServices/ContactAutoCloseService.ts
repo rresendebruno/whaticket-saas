@@ -26,10 +26,12 @@ const ContactAutoCloseService = async (): Promise<void> => {
       Date.now() - contact.autoCloseMinutes * 60 * 1000
     );
 
+    // Só fecha tickets "open". Tickets "pending" seguem a regra global
+    // de horas configurada em autoResolveTimeout (AutoResolveTicketsService).
     const tickets = await Ticket.findAll({
       where: {
         contactId: contact.id,
-        status: { [Op.in]: ["open", "pending"] },
+        status: "open",
         updatedAt: { [Op.lt]: cutoff }
       }
     });
