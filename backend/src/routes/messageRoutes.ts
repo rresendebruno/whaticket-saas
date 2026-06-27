@@ -10,6 +10,7 @@ const messageRoutes = Router();
 const upload = multer(uploadConfig);
 
 messageRoutes.get("/messages/:ticketId", isAuth, MessageController.index);
+messageRoutes.get("/messages/:ticketId/group-members", isAuth, MessageController.groupMembers);
 
 messageRoutes.post(
   "/messages/:ticketId",

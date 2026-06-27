@@ -188,6 +188,11 @@ const sendMessage = async (
   if (options?.quotedMessageId) {
     payload.messageId = options.quotedMessageId;
   }
+  if (options?.mentionAll) {
+    payload.mentionAll = true;
+  } else if (options?.mentioned?.length) {
+    payload.mentioned = options.mentioned;
+  }
 
   try {
     const result = await zapiPost("/send-text", payload);

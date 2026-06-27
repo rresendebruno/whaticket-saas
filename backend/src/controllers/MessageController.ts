@@ -27,6 +27,8 @@ type MessageData = {
   fromMe: boolean;
   read: boolean;
   quotedMsg?: Message;
+  mentioned?: string[];
+  mentionAll?: boolean;
 };
 
 export const index = async (req: Request, res: Response): Promise<Response> => {
@@ -45,7 +47,7 @@ export const index = async (req: Request, res: Response): Promise<Response> => {
 
 export const store = async (req: Request, res: Response): Promise<Response> => {
   const { ticketId } = req.params;
-  const { body, quotedMsg }: MessageData = req.body;
+  const { body, quotedMsg, mentioned, mentionAll }: MessageData = req.body;
   const medias = req.files as Express.Multer.File[];
 
   const ticket = await ShowTicketService(ticketId);
@@ -59,10 +61,36 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
       })
     );
   } else {
-    await SendWhatsAppMessage({ body, ticket, quotedMsg });
+    await SendWhatsAppMessage({ body, ticket, quotedMsg, mentioned, mentionAll });
   }
 
   return res.send();
+};
+
+export const groupMembers = async (req: Request, res: Response): Promise<Response> => {
+  const { ticketId } = req.params;
+  const ticket = await ShowTicketService(ticketId);
+
+  if (!ticket.isGroup) {
+    return res.json({ members: [] });
+  }
+
+  const instanceId = process.env.ZAPI_INSTANCE_ID;
+  const token = process.env.ZAPI_TOKEN;
+  const clientToken = process.env.ZAPI_CLIENT_TOKEN || "";
+  const groupPhone = ticket.contact.number;
+
+  try {
+    const { data } = await axios.get(
+      `https://api.z-api.io/instances/${instanceId}/token/${token}/group-members/${groupPhone}`,
+      { headers: { "Client-Token": clientToken } }
+    );
+    const members = Array.isArray(data) ? data : (data?.members || data?.participants || []);
+    return res.json({ members });
+  } catch (err: any) {
+    logger.error({ msg: "Failed to fetch group members", ticketId, err: err?.response?.data || err?.message });
+    return res.json({ members: [] });
+  }
 };
 
 export const forward = async (

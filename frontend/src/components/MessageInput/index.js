@@ -371,9 +371,70 @@ const useStyles = makeStyles(theme => ({
       },
     },
   },
+
+  // --- Mention dropdown ---
+  mentionListWrapper: {
+    margin: 0,
+    padding: "4px 0",
+    position: "absolute",
+    bottom: "50px",
+    left: 0,
+    width: "100%",
+    background: theme.palette.background.paper,
+    border: "1px solid #CCC",
+    borderRadius: 4,
+    maxHeight: 240,
+    overflowY: "auto",
+    zIndex: 10,
+    boxShadow: "0 2px 12px rgba(0,0,0,0.15)",
+    listStyle: "none",
+  },
+
+  mentionItem: {
+    display: "flex",
+    alignItems: "center",
+    padding: "6px 14px",
+    cursor: "pointer",
+    gap: 10,
+    "&:hover": {
+      background: theme.palette.type === "dark" ? "#333" : "#f0f0f0",
+    },
+  },
+
+  mentionAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: "50%",
+    background: "#25D366",
+    color: "#fff",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 13,
+    fontWeight: 700,
+    flexShrink: 0,
+  },
+
+  mentionAvatarAll: {
+    background: "#128C7E",
+  },
+
+  mentionName: {
+    fontSize: 14,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    flex: 1,
+  },
+
+  mentionPhone: {
+    fontSize: 11,
+    color: theme.palette.type === "dark" ? "#888" : "#999",
+    flexShrink: 0,
+  },
 }));
 
-const MessageInput = ({ ticketStatus }) => {
+const MessageInput = ({ ticketStatus, ticket }) => {
   const classes = useStyles();
   const { ticketId } = useParams();
 
@@ -386,6 +447,15 @@ const MessageInput = ({ ticketStatus }) => {
   const [quickAnswers, setQuickAnswer] = useState([]);
   const [typeBar, setTypeBar] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+
+  // Mention state
+  const [groupMembers, setGroupMembers] = useState([]);
+  const [mentionSearch, setMentionSearch] = useState("");
+  const [showMentions, setShowMentions] = useState(false);
+  const [mentionedPhones, setMentionedPhones] = useState([]);
+  const [mentionAll, setMentionAll] = useState(false);
+  const [mentionAtIndex, setMentionAtIndex] = useState(-1);
+
   const dragCounterRef = useRef(0);
   const addMoreInputRef = useRef(null);
   const inputRef = useRef();
@@ -394,6 +464,8 @@ const MessageInput = ({ ticketStatus }) => {
   const { user } = useContext(AuthContext);
 
   const signMessage = true;
+
+  const isGroup = ticket?.isGroup;
 
   // Generate/revoke object URL previews whenever medias changes
   useEffect(() => {
@@ -456,6 +528,10 @@ const MessageInput = ({ ticketStatus }) => {
 
   useEffect(() => {
     inputRef.current.focus();
+    setGroupMembers([]);
+    setMentionedPhones([]);
+    setMentionAll(false);
+    setShowMentions(false);
     return () => {
       setInputMessage("");
       setShowEmoji(false);
@@ -464,10 +540,72 @@ const MessageInput = ({ ticketStatus }) => {
     };
   }, [ticketId, setReplyingMessage]);
 
-  const handleChangeInput = e => {
-    setInputMessage(e.target.value);
-    handleLoadQuickAnswer(e.target.value);
+  const fetchGroupMembers = async () => {
+    try {
+      const { data } = await api.get(`/messages/${ticketId}/group-members`);
+      setGroupMembers(data.members || []);
+    } catch (err) {
+      console.error("Could not fetch group members", err);
+    }
   };
+
+  const handleChangeInput = e => {
+    const val = e.target.value;
+    setInputMessage(val);
+
+    if (isGroup) {
+      const cursorPos = e.target.selectionStart ?? val.length;
+      const textBeforeCursor = val.slice(0, cursorPos);
+      const atMatch = textBeforeCursor.match(/@([^\s@]*)$/);
+
+      if (atMatch) {
+        const search = atMatch[1].toLowerCase();
+        setMentionSearch(search);
+        setMentionAtIndex(textBeforeCursor.lastIndexOf("@"));
+        setShowMentions(true);
+        setTypeBar(false);
+        if (groupMembers.length === 0) {
+          fetchGroupMembers();
+        }
+        return;
+      } else {
+        setShowMentions(false);
+      }
+    }
+
+    handleLoadQuickAnswer(val);
+  };
+
+  const handleSelectMention = (member) => {
+    const search = mentionSearch;
+    const atIdx = mentionAtIndex;
+    const before = inputMessage.slice(0, atIdx);
+    const after = inputMessage.slice(atIdx + 1 + search.length);
+
+    if (member === "all") {
+      setInputMessage(before + "@todos " + after);
+      setMentionAll(true);
+    } else {
+      const displayName = member.name || member.phone;
+      setInputMessage(before + `@${displayName} ` + after);
+      setMentionedPhones(prev => [...new Set([...prev, member.phone])]);
+    }
+
+    setShowMentions(false);
+    setMentionSearch("");
+    setTimeout(() => inputRef.current?.focus(), 50);
+  };
+
+  const filteredMembers = groupMembers.filter(m => {
+    if (!mentionSearch) return true;
+    const s = mentionSearch.toLowerCase();
+    return (
+      (m.name || "").toLowerCase().includes(s) ||
+      (m.phone || "").includes(s)
+    );
+  });
+
+  const showTodosOption = !mentionSearch || "todos".includes(mentionSearch) || "all".includes(mentionSearch);
 
   const handleQuickAnswersClick = value => {
     setInputMessage(value);
@@ -538,6 +676,8 @@ const MessageInput = ({ ticketStatus }) => {
         ? `*${user?.name}:*\n${inputMessage.trim()}`
         : inputMessage.trim(),
       quotedMsg: replyingMessage,
+      ...(mentionAll ? { mentionAll: true } : {}),
+      ...(mentionedPhones.length > 0 && !mentionAll ? { mentioned: mentionedPhones } : {}),
     };
     try {
       await api.post(`/messages/${ticketId}`, message);
@@ -549,6 +689,9 @@ const MessageInput = ({ ticketStatus }) => {
     setShowEmoji(false);
     setLoading(false);
     setReplyingMessage(null);
+    setMentionedPhones([]);
+    setMentionAll(false);
+    setShowMentions(false);
   };
 
   const handleStartRecording = async () => {
@@ -869,7 +1012,9 @@ const MessageInput = ({ ticketStatus }) => {
               className={classes.messageInput}
               placeholder={
                 ticketStatus === "open"
-                  ? i18n.t("messagesInput.placeholderOpen")
+                  ? isGroup
+                    ? i18n.t("messagesInput.placeholderOpen") + " (@ para mencionar)"
+                    : i18n.t("messagesInput.placeholderOpen")
                   : i18n.t("messagesInput.placeholderClosed")
               }
               multiline
@@ -883,11 +1028,59 @@ const MessageInput = ({ ticketStatus }) => {
               onKeyPress={e => {
                 if (loading || e.shiftKey) return;
                 else if (e.key === "Enter") {
+                  if (showMentions) return; // Não envia se o dropdown de menção está aberto
                   handleSendMessage();
                 }
               }}
+              onKeyDown={e => {
+                if (showMentions && e.key === "Escape") {
+                  setShowMentions(false);
+                }
+              }}
             />
-            {typeBar ? (
+
+            {/* Mention dropdown */}
+            {showMentions && isGroup && (showTodosOption || filteredMembers.length > 0) && (
+              <ClickAwayListener onClickAway={() => setShowMentions(false)}>
+                <ul className={classes.mentionListWrapper}>
+                  {showTodosOption && (
+                    <li
+                      className={classes.mentionItem}
+                      onMouseDown={e => { e.preventDefault(); handleSelectMention("all"); }}
+                    >
+                      <div className={clsx(classes.mentionAvatar, classes.mentionAvatarAll)}>
+                        @
+                      </div>
+                      <span className={classes.mentionName}>
+                        <strong>@todos</strong> — Mencionar todos
+                      </span>
+                    </li>
+                  )}
+                  {filteredMembers.map((member, idx) => (
+                    <li
+                      key={member.phone || idx}
+                      className={classes.mentionItem}
+                      onMouseDown={e => { e.preventDefault(); handleSelectMention(member); }}
+                    >
+                      <div className={classes.mentionAvatar}>
+                        {(member.name || member.phone || "?")[0].toUpperCase()}
+                      </div>
+                      <span className={classes.mentionName}>
+                        {member.name || member.phone}
+                      </span>
+                      {member.name && (
+                        <span className={classes.mentionPhone}>
+                          {member.phone}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </ClickAwayListener>
+            )}
+
+            {/* Quick answers dropdown */}
+            {typeBar && !showMentions ? (
               <ul className={classes.messageQuickAnswersWrapper}>
                 {quickAnswers.map((value, index) => {
                   return (
@@ -904,7 +1097,7 @@ const MessageInput = ({ ticketStatus }) => {
                 })}
               </ul>
             ) : (
-              <div></div>
+              !showMentions && <div></div>
             )}
           </div>
 

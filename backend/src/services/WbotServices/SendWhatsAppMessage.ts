@@ -10,12 +10,16 @@ interface Request {
   body: string;
   ticket: Ticket;
   quotedMsg?: Message;
+  mentioned?: string[];
+  mentionAll?: boolean;
 }
 
 const SendWhatsAppMessage = async ({
   body,
   ticket,
-  quotedMsg
+  quotedMsg,
+  mentioned,
+  mentionAll
 }: Request): Promise<ProviderMessage> => {
   if (!ticket.whatsappId) {
     throw new AppError("ERR_TICKET_NO_WHATSAPP");
@@ -33,7 +37,9 @@ const SendWhatsAppMessage = async ({
       {
         quotedMessageId: quotedMsg?.id,
         quotedMessageFromMe: quotedMsg?.fromMe,
-        linkPreview: false
+        linkPreview: false,
+        mentioned,
+        mentionAll
       }
     );
 
