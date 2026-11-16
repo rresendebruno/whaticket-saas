@@ -17,7 +17,9 @@ import {
 	FormControl,
 	TextField,
 	InputAdornment,
-	IconButton
+	IconButton,
+	FormControlLabel,
+	Checkbox
   } from '@material-ui/core';
 
 import { Visibility, VisibilityOff } from '@material-ui/icons';
@@ -80,7 +82,8 @@ const UserModal = ({ open, onClose, userId }) => {
 		name: "",
 		email: "",
 		password: "",
-		profile: "user"
+		profile: "user",
+		mustChangePassword: false
 	};
 
 	const { user: loggedInUser } = useContext(AuthContext);
@@ -88,20 +91,33 @@ const UserModal = ({ open, onClose, userId }) => {
 	const [user, setUser] = useState(initialState);
 	const [selectedQueueIds, setSelectedQueueIds] = useState([]);
 	const [showPassword, setShowPassword] = useState(false);
-	const [whatsappId, setWhatsappId] = useState(false);
+	const [whatsappId, setWhatsappId] = useState('');
+	// true once the edited user's queues/inbox were loaded from the API
+	const [userLoaded, setUserLoaded] = useState(false);
 	const {loading, whatsApps} = useWhatsApps();
 
+	const canEditQueues = loggedInUser?.profile === "admin";
+
 	useEffect(() => {
+		if (!open) return;
+		setUserLoaded(false);
 		const fetchUser = async () => {
-			if (!userId) return;
+			if (!userId) {
+				// New user: start clean, nothing to load
+				setSelectedQueueIds([]);
+				setWhatsappId('');
+				setUserLoaded(true);
+				return;
+			}
 			try {
 				const { data } = await api.get(`/users/${userId}`);
 				setUser(prevState => {
-					return { ...prevState, ...data };
+					return { ...prevState, ...data, password: "" };
 				});
-				const userQueueIds = data.queues?.map(queue => queue.id);
+				const userQueueIds = data.queues?.map(queue => queue.id) || [];
 				setSelectedQueueIds(userQueueIds);
 				setWhatsappId(data.whatsappId ? data.whatsappId : '');
+				setUserLoaded(true);
 			} catch (err) {
 				toastError(err);
 			}
@@ -113,10 +129,27 @@ const UserModal = ({ open, onClose, userId }) => {
 	const handleClose = () => {
 		onClose();
 		setUser(initialState);
+		setSelectedQueueIds([]);
+		setWhatsappId('');
+		setUserLoaded(false);
 	};
 
 	const handleSaveUser = async values => {
-		const userData = { ...values, whatsappId, queueIds: selectedQueueIds };
+		if (!userLoaded) {
+			toast.info("Aguarde carregar os dados do usuário.");
+			return;
+		}
+		const { queues, whatsapp, ...rest } = values;
+		const userData = { ...rest };
+		// Only admins edit queues/inbox; others must not send them (avoids
+		// overwriting what the admin configured).
+		if (canEditQueues) {
+			userData.whatsappId = whatsappId;
+			userData.queueIds = selectedQueueIds;
+		} else {
+			delete userData.profile;
+		}
+		if (!userData.password) delete userData.password;
 		try {
 			if (userId) {
 				await api.put(`/users/${userId}`, userData);
@@ -155,7 +188,7 @@ const UserModal = ({ open, onClose, userId }) => {
 						}, 400);
 					}}
 				>
-					{({ touched, errors, isSubmitting }) => (
+					{({ touched, errors, isSubmitting, values, setFieldValue }) => (
 						<Form>
 							<DialogContent dividers>
 								<div className={classes.multFieldLine}>
@@ -238,6 +271,23 @@ const UserModal = ({ open, onClose, userId }) => {
 								</div>
 								<Can
 									role={loggedInUser.profile}
+									perform="user-modal:editProfile"
+									yes={() => (
+										<FormControlLabel
+											style={{ marginTop: 4 }}
+											control={
+												<Checkbox
+													color="primary"
+													checked={Boolean(values.mustChangePassword)}
+													onChange={e => setFieldValue("mustChangePassword", e.target.checked)}
+												/>
+											}
+											label="Exigir troca de senha no próximo login"
+										/>
+									)}
+								/>
+								<Can
+									role={loggedInUser.profile}
 									perform="user-modal:editQueues"
 									yes={() => (
 										<QueueSelect
@@ -279,7 +329,7 @@ const UserModal = ({ open, onClose, userId }) => {
 								<Button
 									type="submit"
 									color="primary"
-									disabled={isSubmitting}
+									disabled={isSubmitting || !userLoaded}
 									variant="contained"
 									className={classes.btnWrapper}
 								>

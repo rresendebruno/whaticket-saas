@@ -12,6 +12,7 @@ import { toast } from "react-toastify";
 import api from "../../services/api";
 import { i18n } from "../../translate/i18n.js";
 import toastError from "../../errors/toastError";
+import WhatsappPrivacySettings from "../../components/WhatsappPrivacySettings";
 
 const useStyles = makeStyles(theme => ({
 	root: {
@@ -153,6 +154,8 @@ const Settings = () => {
 						helperText={i18n.t("settings.settings.autoResolveTimeout.helper")}
 					/>
 				</Paper>
+
+				<WhatsappPrivacySettings />
 
 			</Container>
 		</div>

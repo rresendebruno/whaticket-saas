@@ -460,6 +460,27 @@ const messages = {
         ERR_USER_CREATION_DISABLED:
           "A criação do usuário foi desabilitada pelo administrador.",
         ERR_NO_PERMISSION: "Você não tem permissão para acessar este recurso.",
+        ERR_IMPORT_GROUPS:
+          "Não foi possível buscar os grupos na Z-API. Verifique se a conexão está ativa.",
+        ERR_SENDING_REACTION:
+          "Não foi possível enviar a reação pelo WhatsApp. Tente novamente.",
+        ERR_INVALID_REACTION: "Reação inválida.",
+        ERR_MESSAGE_NOT_FOUND: "Mensagem não encontrada.",
+        ERR_INVALID_CURRENT_PASSWORD: "A senha atual está incorreta.",
+        ERR_PASSWORD_TOO_SHORT: "A nova senha precisa ter pelo menos 5 caracteres.",
+        ERR_PASSWORD_SAME_AS_OLD: "A nova senha precisa ser diferente da atual.",
+        ERR_MUST_CHANGE_PASSWORD: "Defina uma nova senha para continuar.",
+        ERR_PROFILE_NAME_TOO_SHORT: "O nome precisa ter pelo menos 2 letras.",
+        ERR_NOTHING_TO_UPDATE: "Nada foi alterado.",
+        ERR_INVALID_CONTACT_CARD: "Informe o nome e um número válido do contato.",
+        ERR_SEND_CONTACT_NOT_SUPPORTED: "Envio de contato só funciona com a conexão Z-API.",
+        ERR_INVALID_PRIVACY_SETTING: "Opção de privacidade inválida.",
+        ERR_PRIVACY_NOT_SUPPORTED: "Privacidade só pode ser alterada com a conexão Z-API.",
+        ERR_UPDATING_PRIVACY: "Não foi possível alterar a privacidade no WhatsApp. Verifique a conexão.",
+        ERR_REACTIONS_NOT_SUPPORTED:
+          "Reações só funcionam com a conexão Z-API.",
+        ERR_IMPORT_GROUPS_NOT_SUPPORTED:
+          "A importação de grupos só funciona com a conexão Z-API.",
         ERR_DUPLICATED_CONTACT: "Já existe um contato com este número.",
         ERR_NO_SETTING_FOUND: "Nenhuma configuração encontrada com este ID.",
         ERR_NO_CONTACT_FOUND: "Nenhum contato encontrado com este ID.",

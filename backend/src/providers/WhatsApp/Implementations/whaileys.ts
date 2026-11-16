@@ -1314,6 +1314,13 @@ const sendMedia = async (
       contextInfo
     };
 
+    if (options?.sendMediaAsSticker && media.mimetype.startsWith("image/")) {
+      return {
+        message: { sticker: mediaBuffer },
+        type: "sticker" as MessageType
+      };
+    }
+
     if (media.mimetype.startsWith("image/")) {
       return {
         message: { image: mediaBuffer, ...base },

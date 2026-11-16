@@ -27,6 +27,7 @@ const CreateMessageService = async ({
   const message = await Message.findByPk(messageData.id, {
     include: [
       "contact",
+      "reactions",
       {
         model: Ticket,
         as: "ticket",

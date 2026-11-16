@@ -358,7 +358,10 @@ const sendMedia = async (
     quotedMessageId: options?.quotedMessageId
   };
 
-  if (
+  if (options?.sendMediaAsSticker && messageMedia.mimetype.startsWith("image/")) {
+    mediaOptions.sendMediaAsSticker = true;
+    if (options.stickerAuthor) mediaOptions.stickerAuthor = options.stickerAuthor;
+  } else if (
     messageMedia.mimetype.startsWith("image/") &&
     !/^.*\.(jpe?g|png|gif)?$/i.exec(media.filename)
   ) {

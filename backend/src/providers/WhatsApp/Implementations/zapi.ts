@@ -2,6 +2,7 @@ import axios from "axios";
 import fs from "fs";
 import { getIO } from "../../../libs/socket";
 import Whatsapp from "../../../models/Whatsapp";
+import Setting from "../../../models/Setting";
 import AppError from "../../../errors/AppError";
 import { logger } from "../../../utils/logger";
 import { WhatsappProvider } from "../whatsappProvider";
@@ -65,7 +66,9 @@ const zapiDelete = async (path: string, params?: Record<string, string | boolean
 // For groups (@g.us): strip only the suffix, keep full alphanumeric ID (e.g. "120363xxx-ABCdef")
 // For individuals (@c.us / @s.whatsapp.net): strip suffix and keep only digits
 const cleanPhone = (to: string): string => {
-  if (to.includes("@g.us")) {
+  // Group IDs ("120363...-group") must keep their suffix. They arrive either
+  // as "<id>@g.us" or as the raw stored contact number "<id>-group".
+  if (to.includes("@g.us") || /-group$/i.test(to)) {
     return to.replace(/@g\.us$/, "");
   }
   return to.replace(/@c\.us|@s\.whatsapp\.net/g, "").replace(/[^\d]/g, "");
@@ -114,12 +117,17 @@ const init = async (whatsapp: Whatsapp): Promise<void> => {
       logger.warn({ msg: "Could not set Z-API webhooks", err });
     }
 
-    // Ensure read receipts are enabled in WhatsApp privacy settings (not available on all plans)
+    // Keep read receipts enabled (needed for the blue ticks) unless an admin
+    // disabled them on the Settings page. Z-API requires ?value=enable|disable;
+    // the old call sent no value and always failed.
     try {
-      await zapiPost("/privacy/read-receipts", {});
-      logger.info("Z-API read receipts privacy: enabled");
-    } catch {
-      // Silently ignore — endpoint not available on all Z-API plans
+      const saved = await Setting.findByPk("privacyReadReceipts");
+      if (saved?.value !== "disable") {
+        await zapiPost("/privacy/read-receipts?value=enable", {});
+        logger.info("Z-API read receipts privacy: enabled");
+      }
+    } catch (err: any) {
+      logger.warn({ msg: "Z-API read receipts not applied", zapiError: err?.response?.data || err?.message });
     }
 
     // Check current connection status
@@ -228,12 +236,24 @@ const sendMedia = async (
   let result: any;
   let msgType: MessageType = "document";
 
+  // Browsers/recorders often label MP3 as "audio/mp3" (non-standard). Z-API expects
+  // the standard "audio/mpeg" in the data URI, otherwise the audio is not delivered.
+  const AUDIO_MIME_FIX: Record<string, string> = {
+    "audio/mp3": "audio/mpeg",
+    "audio/x-mp3": "audio/mpeg",
+    "audio/x-mpeg": "audio/mpeg",
+    "audio/x-m4a": "audio/mp4",
+    "audio/x-wav": "audio/wav"
+  };
+  const baseMime = media.mimetype.split(";")[0].trim().toLowerCase();
+  const dataMime = AUDIO_MIME_FIX[baseMime] || baseMime;
+
   let mediaSource: string;
   if (media.data) {
-    mediaSource = `data:${media.mimetype};base64,${media.data.toString("base64")}`;
+    mediaSource = `data:${dataMime};base64,${media.data.toString("base64")}`;
   } else if (media.path) {
     const fileBuffer = fs.readFileSync(media.path);
-    mediaSource = `data:${media.mimetype};base64,${fileBuffer.toString("base64")}`;
+    mediaSource = `data:${dataMime};base64,${fileBuffer.toString("base64")}`;
     logger.info({
       msg: "Z-API sendMedia",
       phone,
@@ -249,7 +269,16 @@ const sendMedia = async (
   const fileExt = (media.filename || "file").split(".").pop()?.toLowerCase() || "bin";
 
   try {
-    if (media.mimetype.startsWith("image/")) {
+    if (options?.sendMediaAsSticker && media.mimetype.startsWith("image/")) {
+      // Z-API sticker endpoint: accepts a URL or a data URI (data:image/...;base64,...)
+      result = await zapiPost("/send-sticker", {
+        phone,
+        sticker: mediaSource,
+        ...(options?.stickerAuthor && { stickerAuthor: options.stickerAuthor }),
+        ...(quotedMessageId && { messageId: quotedMessageId })
+      });
+      msgType = "sticker";
+    } else if (media.mimetype.startsWith("image/")) {
       result = await zapiPost("/send-image", {
         phone,
         image: mediaSource,
@@ -261,7 +290,8 @@ const sendMedia = async (
       result = await zapiPost("/send-audio", {
         phone,
         audio: mediaSource,
-        ...(quotedMessageId && { messageId: quotedMessageId })
+        // waveform = shows as a voice note (with sound waves), like a recorded audio
+        waveform: Boolean(options?.sendAudioAsVoice)
       });
       msgType = options?.sendAudioAsVoice ? "ptt" : "audio";
     } else if (media.mimetype.startsWith("video/")) {
@@ -345,8 +375,9 @@ const getProfilePicUrl = async (
 ): Promise<string> => {
   const phone = cleanPhone(number);
   try {
-    const result = await zapiGet(`/profile-picture?phone=${phone}`);
-    return result?.value || "";
+    const result = await zapiGet(`/profile-picture?phone=${encodeURIComponent(phone)}`);
+    // Z-API documents the field as "link" (older code read "value")
+    return result?.link || result?.value || "";
   } catch {
     return "";
   }
@@ -366,6 +397,166 @@ const getContacts = async (_sessionId: number): Promise<ProviderContact[]> => {
     }));
   } catch {
     return [];
+  }
+};
+
+// GET /groups?page=N&pageSize=M — returns every group of the instance, paginated.
+// Group "phone" comes as e.g. "120363358412332916-group", the same ID format the
+// webhook uses, so it is stored as-is (only an eventual @g.us is stripped).
+const GROUPS_PAGE_SIZE = 100;
+const GROUPS_MAX_PAGES = 50; // safety cap: 5,000 groups
+
+const getGroups = async (_sessionId: number): Promise<ProviderContact[]> => {
+  const groups: ProviderContact[] = [];
+  const seen = new Set<string>();
+
+  for (let page = 1; page <= GROUPS_MAX_PAGES; page += 1) {
+    const data = await zapiGet(`/groups?page=${page}&pageSize=${GROUPS_PAGE_SIZE}`);
+    const list: any[] = Array.isArray(data) ? data : [];
+
+    list.forEach(g => {
+      const id = String(g?.phone || "").replace(/@g\.us$/, "").trim();
+      // Defensive: the endpoint should only return groups
+      if (!id || g?.isGroup === false || seen.has(id)) return;
+      seen.add(id);
+      groups.push({
+        id,
+        name: g?.name || id,
+        pushname: g?.name || id,
+        number: id,
+        isGroup: true
+      });
+    });
+
+    if (list.length < GROUPS_PAGE_SIZE) break;
+  }
+
+  logger.info({ msg: "Z-API getGroups", total: groups.length });
+  return groups;
+};
+
+// GET /group-metadata/{groupId} — subject, description and participants
+// ({ phone, isAdmin, isSuperAdmin, name? }) of a group.
+const getGroupMetadata = async (
+  _sessionId: number,
+  groupId: string
+): Promise<{
+  subject?: string;
+  description?: string;
+  owner?: string;
+  participants: { phone: string; isAdmin: boolean; isSuperAdmin: boolean; name?: string }[];
+}> => {
+  const id = cleanPhone(groupId);
+  const data = await zapiGet(`/group-metadata/${encodeURIComponent(id)}`);
+  const participants = Array.isArray(data?.participants) ? data.participants : [];
+  return {
+    subject: data?.subject,
+    description: data?.description,
+    owner: data?.owner,
+    participants: participants.map((p: any) => ({
+      phone: String(p?.phone || "").replace(/@.+$/, ""),
+      isAdmin: Boolean(p?.isAdmin),
+      isSuperAdmin: Boolean(p?.isSuperAdmin),
+      name: p?.name || p?.short || undefined
+    }))
+  };
+};
+
+// --- Privacy settings ---
+// Z-API only offers setters (no endpoint to read the current values).
+export type PrivacySetting =
+  | "photo"
+  | "lastSeen"
+  | "description"
+  | "online"
+  | "readReceipts";
+
+const PRIVACY_PATHS: Record<Exclude<PrivacySetting, "readReceipts">, string> = {
+  photo: "/privacy/photo-visualization",
+  lastSeen: "/privacy/last-seen",
+  description: "/privacy/description",
+  online: "/privacy/online"
+};
+
+const setPrivacy = async (
+  _sessionId: number,
+  setting: PrivacySetting,
+  value: string
+): Promise<void> => {
+  try {
+    if (setting === "readReceipts") {
+      // value goes in the query string: enable | disable
+      await zapiPost(`/privacy/read-receipts?value=${encodeURIComponent(value)}`, {});
+    } else {
+      await zapiPost(PRIVACY_PATHS[setting], { visualizationType: value });
+    }
+    logger.info({ msg: "Z-API privacy updated", setting, value });
+  } catch (err: any) {
+    logger.error({ msg: "Z-API setPrivacy error", setting, value, zapiError: err?.response?.data || err?.message });
+    throw err;
+  }
+};
+
+// POST /send-contact { phone, contactName, contactPhone, messageId? }
+const sendContact = async (
+  _sessionId: number,
+  to: string,
+  contactName: string,
+  contactPhone: string,
+  quotedMessageId?: string
+): Promise<ProviderMessage> => {
+  const phone = cleanPhone(to);
+  try {
+    const result = await zapiPost("/send-contact", {
+      phone,
+      contactName,
+      contactPhone,
+      ...(quotedMessageId && { messageId: quotedMessageId })
+    });
+    return {
+      id: result?.messageId || result?.id || `zapi-${Date.now()}`,
+      body: contactName,
+      fromMe: true,
+      hasMedia: false,
+      type: "vcard",
+      timestamp: Math.floor(Date.now() / 1000),
+      from: "",
+      to: phone
+    };
+  } catch (err: any) {
+    logger.error({ msg: "Z-API sendContact error", phone, zapiError: err?.response?.data || err?.message });
+    throw err;
+  }
+};
+
+// POST /send-reaction { phone, reaction, messageId }
+const sendReaction = async (
+  _sessionId: number,
+  chatId: string,
+  messageId: string,
+  emoji: string
+): Promise<void> => {
+  const phone = cleanPhone(chatId);
+  try {
+    await zapiPost("/send-reaction", { phone, reaction: emoji, messageId });
+  } catch (err: any) {
+    logger.error({ msg: "Z-API sendReaction error", phone, messageId, zapiError: err?.response?.data || err?.message });
+    throw err;
+  }
+};
+
+// POST /send-remove-reaction { phone, messageId }
+const removeReaction = async (
+  _sessionId: number,
+  chatId: string,
+  messageId: string
+): Promise<void> => {
+  const phone = cleanPhone(chatId);
+  try {
+    await zapiPost("/send-remove-reaction", { phone, messageId });
+  } catch (err: any) {
+    logger.error({ msg: "Z-API removeReaction error", phone, messageId, zapiError: err?.response?.data || err?.message });
+    throw err;
   }
 };
 
@@ -403,6 +594,12 @@ export const ZApiProvider: WhatsappProvider = {
   checkNumber,
   getProfilePicUrl,
   getContacts,
+  getGroups,
+  sendReaction,
+  removeReaction,
+  setPrivacy,
+  sendContact,
+  getGroupMetadata,
   sendSeen,
   fetchChatMessages
 };

@@ -2,8 +2,12 @@ import { Router } from "express";
 
 import isAuth from "../middleware/isAuth";
 import * as UserController from "../controllers/UserController";
+import * as ProfileController from "../controllers/ProfileController";
 
 const userRoutes = Router();
+
+// Own profile (name/password) — available to every logged-in user
+userRoutes.put("/profile", isAuth, ProfileController.update);
 
 userRoutes.get("/users", isAuth, UserController.index);
 

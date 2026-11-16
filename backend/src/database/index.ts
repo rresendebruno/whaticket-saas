@@ -13,6 +13,8 @@ import QuickAnswer from "../models/QuickAnswer";
 import WppKey from "../models/WppKey";
 import Chatbot from "../models/Chatbot";
 import ChatbotOption from "../models/ChatbotOption";
+import Sticker from "../models/Sticker";
+import MessageReaction from "../models/MessageReaction";
 
 // eslint-disable-next-line
 const dbConfig = require("../config/database");
@@ -34,7 +36,9 @@ const models = [
   QuickAnswer,
   WppKey,
   Chatbot,
-  ChatbotOption
+  ChatbotOption,
+  Sticker,
+  MessageReaction
 ];
 
 sequelize.addModels(models);

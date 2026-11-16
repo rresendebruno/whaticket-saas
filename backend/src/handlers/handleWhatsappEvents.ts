@@ -82,6 +82,10 @@ const processLocationMessage = (
   return messagePayload;
 };
 
+// Group photo refresh throttle (in memory; resets on restart, which is fine)
+const GROUP_PHOTO_REFRESH_MS = 12 * 60 * 60 * 1000;
+const groupPhotoFetchedAt = new Map<number, number>();
+
 const saveMediaFile = async (mediaPayload: MediaPayload): Promise<string> => {
   const randomId = makeRandomId(5);
   const { filename: originalFilename } = mediaPayload;
@@ -426,10 +430,22 @@ export const handleMessage = async (
         isGroup: contextPayload.groupContact.isGroup
       });
 
-      // Fetch group photo if missing
-      if (!groupContact.profilePicUrl) {
-        whatsappProvider.getProfilePicUrl(contextPayload.whatsappId, contextPayload.groupContact.number)
-          .then(url => { if (url) groupContact!.update({ profilePicUrl: url }); })
+      // Fetch the group photo when missing, and refresh it periodically:
+      // WhatsApp photo links expire (~48h), so a stored URL eventually breaks.
+      const lastFetch = groupPhotoFetchedAt.get(groupContact.id) || 0;
+      if (
+        !groupContact.profilePicUrl ||
+        Date.now() - lastFetch > GROUP_PHOTO_REFRESH_MS
+      ) {
+        groupPhotoFetchedAt.set(groupContact.id, Date.now());
+        const target = groupContact;
+        whatsappProvider.getProfilePicUrl(contextPayload.whatsappId, target.number)
+          .then(url => {
+            if (url && url !== target.profilePicUrl) {
+              return target.update({ profilePicUrl: url });
+            }
+            return undefined;
+          })
           .catch(() => {});
       }
     }
@@ -466,8 +482,10 @@ export const handleMessage = async (
       const filename = await saveMediaFile(mediaPayload);
       messageData.mediaUrl = filename;
       messageData.body = processedMessage.body || filename;
+      // Keep "sticker" so the frontend renders it as a sticker (not a cropped photo)
       const [mediaType] = mediaPayload.mimetype.split("/");
-      messageData.mediaType = mediaType;
+      messageData.mediaType =
+        processedMessage.type === "sticker" ? "sticker" : mediaType;
     }
 
     let lastMessageText = "";

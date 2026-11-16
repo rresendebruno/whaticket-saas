@@ -13,6 +13,8 @@ import quickAnswerRoutes from "./quickAnswerRoutes";
 import apiRoutes from "./apiRoutes";
 import chatbotRoutes from "./chatbotRoutes";
 import reportRoutes from "./reportRoutes";
+import stickerRoutes from "./stickerRoutes";
+import whatsappPrivacyRoutes from "./whatsappPrivacyRoutes";
 
 const routes = Router();
 
@@ -29,5 +31,7 @@ routes.use(quickAnswerRoutes);
 routes.use("/api/messages", apiRoutes);
 routes.use(chatbotRoutes);
 routes.use(reportRoutes);
+routes.use(stickerRoutes);
+routes.use(whatsappPrivacyRoutes);
 
 export default routes;

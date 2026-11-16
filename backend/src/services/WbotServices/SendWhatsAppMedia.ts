@@ -5,17 +5,24 @@ import CreateMessageService from "../MessageServices/CreateMessageService";
 import { logger } from "../../utils/logger";
 
 import formatBody from "../../helpers/Mustache";
+import convertAudioToMp3, {
+  needsMp3Conversion
+} from "../../helpers/convertAudioToMp3";
+import fs from "fs";
+import path from "path";
 
 interface Request {
   media: Express.Multer.File;
   ticket: Ticket;
   body?: string;
+  asSticker?: boolean;
 }
 
 const SendWhatsAppMedia = async ({
   media,
   ticket,
-  body
+  body,
+  asSticker
 }: Request): Promise<ProviderMessage> => {
   try {
     if (!ticket.whatsappId) {
@@ -28,16 +35,35 @@ const SendWhatsAppMedia = async ({
       ? formatBody(body as string, ticket.contact)
       : undefined;
 
+    // Browser recordings come as webm/ogg/m4a — convert to MP3, the format
+    // Z-API documents for /send-audio.
+    let filePath = media.path;
+    let mimetype = media.mimetype;
+    let storedFilename = media.filename;
+    let displayName = media.originalname || media.filename;
+    if (media.path && needsMp3Conversion(media.mimetype)) {
+      filePath = await convertAudioToMp3(media.path);
+      mimetype = "audio/mpeg";
+      storedFilename = path.basename(filePath);
+      displayName = displayName.replace(/\.[^.]+$/, "") + ".mp3";
+      fs.promises.unlink(media.path).catch(() => {});
+      logger.info({ msg: "Audio converted to MP3", from: media.mimetype, file: storedFilename });
+    }
+
     const mediaInput = {
-      filename: media.originalname || media.filename,
-      mimetype: media.mimetype,
-      path: media.path
+      filename: displayName,
+      mimetype,
+      path: filePath
     };
 
+    const isSticker = Boolean(asSticker) && media.mimetype.startsWith("image/");
+
     const mediaOptions = {
-      caption: hasBody,
+      caption: isSticker ? undefined : hasBody,
       sendAudioAsVoice: true,
+      sendMediaAsSticker: isSticker,
       sendMediaAsDocument:
+        !isSticker &&
         media.mimetype.startsWith("image/") &&
         !/^.*\.(jpe?g|png|gif)?$/i.exec(media.filename)
     };
@@ -49,11 +75,13 @@ const SendWhatsAppMedia = async ({
       mediaOptions
     );
 
-    const originalName = media.originalname || media.filename;
-    await ticket.update({ lastMessage: body || originalName });
+    const originalName = displayName;
+    await ticket.update({
+      lastMessage: isSticker ? "[Figurinha]" : body || originalName
+    });
 
-    const [mediaType] = media.mimetype.split("/");
-    const mediaFilename = media.filename;
+    const mediaType = isSticker ? "sticker" : mimetype.split("/")[0];
+    const mediaFilename = storedFilename;
 
     await CreateMessageService({
       messageData: {

@@ -51,6 +51,11 @@ class User extends Model<User> {
   @Column
   lastLogin: Date;
 
+  // Set by an admin: the user must choose a new password on next login
+  @Default(false)
+  @Column
+  mustChangePassword: boolean;
+
   @ForeignKey(() => Whatsapp)
   @Column
   whatsappId: number;

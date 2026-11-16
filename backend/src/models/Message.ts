@@ -8,10 +8,12 @@ import {
   PrimaryKey,
   Default,
   BelongsTo,
-  ForeignKey
+  ForeignKey,
+  HasMany
 } from "sequelize-typescript";
 import Contact from "./Contact";
 import Ticket from "./Ticket";
+import MessageReaction from "./MessageReaction";
 
 @Table
 class Message extends Model<Message> {
@@ -79,6 +81,9 @@ class Message extends Model<Message> {
 
   @BelongsTo(() => Contact, "contactId")
   contact: Contact;
+
+  @HasMany(() => MessageReaction)
+  reactions: MessageReaction[];
 }
 
 export default Message;

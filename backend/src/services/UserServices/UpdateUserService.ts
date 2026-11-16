@@ -11,6 +11,7 @@ interface UserData {
   profile?: string;
   queueIds?: number[];
   whatsappId?: number;
+  mustChangePassword?: boolean;
 }
 
 interface Request {
@@ -43,8 +44,9 @@ const UpdateUserService = async ({
     password,
     profile,
     name,
-    queueIds = [],
-    whatsappId
+    queueIds,
+    whatsappId,
+    mustChangePassword
   } = userData;
 
   try {
@@ -53,15 +55,25 @@ const UpdateUserService = async ({
     throw new AppError(err.message);
   }
 
-  await user.update({
-    email,
-    password,
-    profile,
-    name,
-    whatsappId: whatsappId ? whatsappId : null
-  });
+  // Only touch fields that were actually sent. A partial update (e.g. just a
+  // new password) must NOT wipe the user's queues or inbox (whatsappId).
+  const updates: Record<string, unknown> = {};
+  if (email !== undefined) updates.email = email;
+  if (name !== undefined) updates.name = name;
+  if (profile !== undefined) updates.profile = profile;
+  if (password) updates.password = password; // empty = keep current password
+  if (mustChangePassword !== undefined) {
+    updates.mustChangePassword = Boolean(mustChangePassword);
+  }
+  if (whatsappId !== undefined) {
+    updates.whatsappId = whatsappId ? whatsappId : null;
+  }
 
-  await user.$set("queues", queueIds);
+  await user.update(updates);
+
+  if (Array.isArray(queueIds)) {
+    await user.$set("queues", queueIds);
+  }
 
   await user.reload();
 

@@ -28,6 +28,9 @@ export const index = async (req: Request, res: Response): Promise<Response> => {
 
 export const store = async (req: Request, res: Response): Promise<Response> => {
   const { email, password, name, profile, queueIds, whatsappId } = req.body;
+  // Only an admin creating a user may require a password change (not /signup)
+  const mustChangePassword =
+    req.url !== "/signup" && Boolean(req.body.mustChangePassword);
 
   if (
     req.url === "/signup" &&
@@ -44,7 +47,8 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
     name,
     profile,
     queueIds,
-    whatsappId
+    whatsappId,
+    mustChangePassword
   });
 
   const io = getIO();

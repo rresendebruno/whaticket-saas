@@ -34,12 +34,15 @@ const ListMessagesService = async ({
     limit,
     include: [
       "contact",
+      "reactions",
       {
         model: Message,
         as: "quotedMsg",
         include: ["contact"]
       }
     ],
+    // reactions are a hasMany: without distinct, count would include them
+    distinct: true,
     offset,
     order: [["createdAt", "DESC"]]
   });

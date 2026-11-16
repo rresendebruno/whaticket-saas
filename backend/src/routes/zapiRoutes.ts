@@ -225,6 +225,46 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
       return;
     }
 
+    // --- Emoji reaction (added, changed or removed) ---
+    // payload.reaction = { value: "❤️" | "" (removed), reactionBy,
+    //                      referencedMessage: { messageId, fromMe, phone, participant } }
+    if (payload.reaction) {
+      const reaction = payload.reaction || {};
+      const refId: string = reaction.referencedMessage?.messageId || "";
+      // Reactions sent through our API were already saved by MessageController.react
+      if (!refId || (payload.fromMe && payload.fromApi !== false)) return;
+
+      const isGroupReaction = Boolean(payload.participantPhone) || payload.isGroup === true;
+      const rawSender: string = payload.fromMe
+        ? "me"
+        : String(
+            (isGroupReaction ? payload.participantPhone : payload.phone) ||
+              reaction.reactionBy ||
+              ""
+          )
+            .replace(/@.+$/, "")
+            .replace(/\D/g, "");
+      if (!rawSender) return;
+
+      const { default: SetMessageReactionService } = await import(
+        "../services/MessageServices/SetMessageReactionService"
+      );
+      const updated = await SetMessageReactionService({
+        messageId: refId,
+        senderNumber: rawSender,
+        emoji: String(reaction.value || ""),
+        fromMe: Boolean(payload.fromMe),
+        senderName: payload.fromMe
+          ? "Celular da empresa"
+          : payload.senderName || payload.chatName || rawSender
+      });
+
+      if (!updated) {
+        logger.warn({ msg: "Reaction for unknown message — ignored", refId });
+      }
+      return;
+    }
+
     // Skip messages sent by our backend API (already saved by SendWhatsAppMessage)
     // Allow messages sent directly from the physical phone (fromApi: false) to sync
     if (payload.fromMe && payload.fromApi !== false) return;
@@ -275,7 +315,11 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
       name: senderName,
       number: phone,
       lid: contactLid,
-      profilePicUrl: payload.senderPhoto || payload.photo || undefined,
+      // In group messages "photo" is the chat (group) photo — only use the
+      // sender's own photo for the participant contact.
+      profilePicUrl: isGroup
+        ? payload.senderPhoto || undefined
+        : payload.senderPhoto || payload.photo || undefined,
       isGroup: false
     };
 

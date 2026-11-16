@@ -11,6 +11,7 @@ import TableHead from "@material-ui/core/TableHead";
 import TableRow from "@material-ui/core/TableRow";
 import Paper from "@material-ui/core/Paper";
 import Button from "@material-ui/core/Button";
+import CircularProgress from "@material-ui/core/CircularProgress";
 import WhatsAppIcon from "@material-ui/icons/WhatsApp";
 import SearchIcon from "@material-ui/icons/Search";
 import TextField from "@material-ui/core/TextField";
@@ -120,6 +121,7 @@ const Contacts = () => {
   const [mergingContact, setMergingContact] = useState(null);
   const [mergeSearch, setMergeSearch] = useState("");
   const [mergeCandidates, setMergeCandidates] = useState([]);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     dispatch({ type: "RESET" });
@@ -144,7 +146,7 @@ const Contacts = () => {
       fetchContacts();
     }, 500);
     return () => clearTimeout(delayDebounceFn);
-  }, [searchParam, pageNumber]);
+  }, [searchParam, pageNumber, reloadKey]);
 
   useEffect(() => {
     const socket = openSocket();
@@ -226,6 +228,25 @@ const Contacts = () => {
     } catch (err) {
       toastError(err);
     }
+  };
+
+  const [importingGroups, setImportingGroups] = useState(false);
+
+  const handleImportGroups = async () => {
+    setImportingGroups(true);
+    try {
+      const { data } = await api.post("/contacts/import-groups");
+      toast.success(
+        `${data.total} grupo(s) encontrado(s): ${data.created} novo(s), ${data.updated} atualizado(s).`
+      );
+      // Reload the list from page 1 without a full page refresh (keeps the toast)
+      dispatch({ type: "RESET" });
+      setPageNumber(1);
+      setReloadKey(k => k + 1);
+    } catch (err) {
+      toastError(err);
+    }
+    setImportingGroups(false);
   };
 
   const handleOpenMergeModal = async (contact) => {
@@ -358,6 +379,21 @@ const Contacts = () => {
               onClick={(e) => setConfirmOpen(true)}
             >
               {i18n.t("contacts.buttons.import")}
+            </Button>
+          )}
+          {user.profile === "admin" && (
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={handleImportGroups}
+              disabled={importingGroups}
+              startIcon={
+                importingGroups ? (
+                  <CircularProgress size={16} color="inherit" />
+                ) : null
+              }
+            >
+              {importingGroups ? "Importando..." : "Importar grupos"}
             </Button>
           )}
           <Button

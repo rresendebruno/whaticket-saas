@@ -23,9 +23,11 @@ import InsertDriveFileIcon from "@material-ui/icons/InsertDriveFile";
 import AddIcon from "@material-ui/icons/Add";
 import CloudUploadIcon from "@material-ui/icons/CloudUpload";
 import {
+  FormControlLabel,
   Hidden,
   Menu,
   MenuItem,
+  Switch,
   Typography,
 } from "@material-ui/core";
 import ClickAwayListener from "@material-ui/core/ClickAwayListener";
@@ -33,24 +35,21 @@ import ClickAwayListener from "@material-ui/core/ClickAwayListener";
 import { i18n } from "../../translate/i18n";
 import api from "../../services/api";
 import RecordingTimer from "./RecordingTimer";
+import StickerPicker from "../StickerPicker";
+import SendContactModal from "../SendContactModal";
+import ContactPhoneIcon from "@material-ui/icons/ContactPhone";
+import Tooltip from "@material-ui/core/Tooltip";
+import {
+  startRecording,
+  stopRecording,
+  cancelRecording,
+  recorderErrorMessage,
+} from "./audioRecorder";
+import { toast } from "react-toastify";
 import { ReplyMessageContext } from "../../context/ReplyingMessage/ReplyingMessageContext";
 import { AuthContext } from "../../context/Auth/AuthContext";
 import toastError from "../../errors/toastError";
 
-let Mp3Recorder = null;
-
-const initRecorder = async () => {
-  if (!Mp3Recorder) {
-    try {
-      const MicRecorder = (await import("mic-recorder-to-mp3")).default;
-      Mp3Recorder = new MicRecorder({ bitRate: 128 });
-    } catch (error) {
-      console.error("Failed to initialize recorder:", error);
-      return null;
-    }
-  }
-  return Mp3Recorder;
-};
 
 const useStyles = makeStyles(theme => ({
   mainWrapper: {
@@ -440,6 +439,8 @@ const MessageInput = ({ ticketStatus, ticket }) => {
 
   const [medias, setMedias] = useState([]);
   const [previews, setPreviews] = useState([]);
+  const [asSticker, setAsSticker] = useState(false);
+  const [contactModalOpen, setContactModalOpen] = useState(false);
   const [inputMessage, setInputMessage] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -650,12 +651,24 @@ const MessageInput = ({ ticketStatus, ticket }) => {
     setMedias(prev => prev.filter((_, i) => i !== index));
   };
 
+  // Sticker option is only available when every queued file is an image
+  const allImages =
+    medias.length > 0 && medias.every(m => m.type?.startsWith("image/"));
+
+  // Default to sticker mode when every file is a .webp (typical sticker format)
+  useEffect(() => {
+    setAsSticker(
+      medias.length > 0 && medias.every(m => m.type === "image/webp")
+    );
+  }, [medias]);
+
   const handleUploadMedia = async e => {
     setLoading(true);
     e.preventDefault();
 
     const formData = new FormData();
     formData.append("fromMe", true);
+    if (asSticker && allImages) formData.append("asSticker", true);
     medias.forEach(media => {
       formData.append("medias", media);
       formData.append("body", media.name);
@@ -704,16 +717,13 @@ const MessageInput = ({ ticketStatus, ticket }) => {
   const handleStartRecording = async () => {
     setLoading(true);
     try {
-      const recorder = await initRecorder();
-      if (!recorder) throw new Error("Recorder not available");
-      await navigator.mediaDevices.getUserMedia({ audio: true });
-      await recorder.start();
+      await startRecording();
       setRecording(true);
-      setLoading(false);
     } catch (err) {
-      toastError(err);
-      setLoading(false);
+      console.error("Audio recorder error:", err);
+      toast.error(recorderErrorMessage(err));
     }
+    setLoading(false);
   };
 
   const handleLoadQuickAnswer = async value => {
@@ -739,39 +749,40 @@ const MessageInput = ({ ticketStatus, ticket }) => {
   const handleUploadAudio = async () => {
     setLoading(true);
     try {
-      const recorder = await initRecorder();
-      if (!recorder) throw new Error("Recorder not available");
-      const [, blob] = await recorder.stop().getMp3();
-      if (blob.size < 10000) {
+      const { blob, filename, durationMs } = await stopRecording();
+      if (durationMs < 1000 || blob.size === 0) {
+        toast.info("Áudio muito curto. Segure a gravação por pelo menos 1 segundo.");
         setLoading(false);
         setRecording(false);
         return;
       }
 
       const formData = new FormData();
-      const filename = `${new Date().getTime()}.mp3`;
       formData.append("medias", blob, filename);
       formData.append("body", filename);
       formData.append("fromMe", true);
 
       await api.post(`/messages/${ticketId}`, formData);
     } catch (err) {
-      toastError(err);
+      if (err?.response) {
+        toastError(err);
+      } else {
+        console.error("Audio recorder error:", err);
+        toast.error(recorderErrorMessage(err));
+      }
     }
 
     setRecording(false);
     setLoading(false);
   };
 
-  const handleCancelAudio = async () => {
-    try {
-      const recorder = await initRecorder();
-      if (recorder) await recorder.stop().getMp3();
-      setRecording(false);
-    } catch (err) {
-      toastError(err);
-    }
+  const handleCancelAudio = () => {
+    cancelRecording();
+    setRecording(false);
   };
+
+  // Release the microphone if the component unmounts mid-recording
+  useEffect(() => () => cancelRecording(), []);
 
   const handleOpenMenuClick = event => {
     setAnchorEl(event.currentTarget);
@@ -843,6 +854,25 @@ const MessageInput = ({ ticketStatus, ticket }) => {
                 : `${medias.length} arquivos selecionados`}
             </Typography>
             <div className={classes.mediaPreviewActions}>
+              {allImages && (
+                <FormControlLabel
+                  style={{ marginRight: 8 }}
+                  control={
+                    <Switch
+                      size="small"
+                      color="primary"
+                      checked={asSticker}
+                      onChange={e => setAsSticker(e.target.checked)}
+                      disabled={loading}
+                    />
+                  }
+                  label={
+                    <Typography style={{ fontSize: 13 }}>
+                      Enviar como figurinha
+                    </Typography>
+                  }
+                />
+              )}
               <IconButton
                 size="small"
                 aria-label="cancel-upload"
@@ -943,6 +973,32 @@ const MessageInput = ({ ticketStatus, ticket }) => {
                 </ClickAwayListener>
               </div>
             ) : null}
+
+            <StickerPicker
+              ticketId={ticketId}
+              disabled={loading || recording || ticketStatus !== "open"}
+              iconClassName={classes.sendMessageIcons}
+            />
+
+            <Tooltip title="Enviar contato">
+              <span>
+                <IconButton
+                  aria-label="sendContact"
+                  component="span"
+                  disabled={loading || recording || ticketStatus !== "open"}
+                  onClick={() => setContactModalOpen(true)}
+                >
+                  <ContactPhoneIcon className={classes.sendMessageIcons} />
+                </IconButton>
+              </span>
+            </Tooltip>
+            <SendContactModal
+              open={contactModalOpen}
+              onClose={() => setContactModalOpen(false)}
+              ticketId={ticketId}
+              quotedMsgId={replyingMessage?.id}
+              onSent={() => setReplyingMessage(null)}
+            />
 
             <input
               multiple

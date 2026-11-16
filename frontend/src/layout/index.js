@@ -20,7 +20,7 @@ import Brightness4Icon from "@material-ui/icons/Brightness4";
 
 import MainListItems from "./MainListItems";
 import NotificationsPopOver from "../components/NotificationsPopOver";
-import UserModal from "../components/UserModal";
+import ProfileModal from "../components/ProfileModal";
 import { AuthContext } from "../context/Auth/AuthContext";
 import BackdropLoading from "../components/BackdropLoading";
 import { i18n } from "../translate/i18n";
@@ -205,11 +205,14 @@ const LoggedInLayout = ({ children }) => {
         </List>
         <Divider />
       </Drawer>
-      <UserModal
+      {/* "Perfil": every user edits only their own name/password here.
+          Queues/inbox/profile stay on the Users page (admin). */}
+      <ProfileModal
         open={userModalOpen}
         onClose={() => setUserModalOpen(false)}
-        userId={user?.id}
       />
+      {/* Admin required a password change: block the app until it's done */}
+      <ProfileModal open={Boolean(user?.id && user?.mustChangePassword)} forced />
       <AppBar
         position="absolute"
         className={clsx(classes.appBar, drawerOpen && classes.appBarShift)}

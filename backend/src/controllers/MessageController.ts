@@ -3,6 +3,7 @@ import axios from "axios";
 import { Op } from "sequelize";
 
 import SetTicketMessagesAsRead from "../helpers/SetTicketMessagesAsRead";
+import normalizeBrazilianPhone from "../helpers/normalizeBrazilianPhone";
 import { getIO } from "../libs/socket";
 import Message from "../models/Message";
 import Contact from "../models/Contact";
@@ -17,6 +18,8 @@ import DeleteWhatsAppMessage from "../services/WbotServices/DeleteWhatsAppMessag
 import SendWhatsAppMedia from "../services/WbotServices/SendWhatsAppMedia";
 import SendWhatsAppMessage from "../services/WbotServices/SendWhatsAppMessage";
 import CreateMessageService from "../services/MessageServices/CreateMessageService";
+import SetMessageReactionService from "../services/MessageServices/SetMessageReactionService";
+import { whatsappProvider } from "../providers/WhatsApp";
 
 type IndexQuery = {
   pageNumber: string;
@@ -49,6 +52,8 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
   const { ticketId } = req.params;
   const { body, quotedMsg, mentioned, mentionAll }: MessageData = req.body;
   const medias = req.files as Express.Multer.File[];
+  // multipart/form-data sends booleans as strings
+  const asSticker = String(req.body.asSticker) === "true";
 
   const ticket = await ShowTicketService(ticketId);
 
@@ -57,7 +62,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
   if (medias) {
     await Promise.all(
       medias.map(async (media: Express.Multer.File) => {
-        await SendWhatsAppMedia({ media, ticket });
+        await SendWhatsAppMedia({ media, ticket, asSticker });
       })
     );
   } else {
@@ -86,33 +91,75 @@ export const groupMembers = async (req: Request, res: Response): Promise<Respons
     .filter(m => (m as any).contact?.number && !seen.has((m as any).contactId) && seen.add((m as any).contactId))
     .map(m => ({ phone: (m as any).contact.number, name: (m as any).contact.name || (m as any).contact.number }));
 
-  // Try Z-API — stored number has no @g.us suffix, so we add it back
-  const instanceId = process.env.ZAPI_INSTANCE_ID;
-  const token = process.env.ZAPI_TOKEN;
-  const clientToken = process.env.ZAPI_CLIENT_TOKEN || "";
-  const groupPhone = `${ticket.contact.number}@g.us`;
+  // Full participant list from Z-API: GET /group-metadata/{groupId}
+  // (the old code called an undocumented /group-members endpoint and always
+  // fell back to "people who already wrote in this ticket").
+  if (whatsappProvider.getGroupMetadata && ticket.whatsappId) {
+    try {
+      const meta = await whatsappProvider.getGroupMetadata(
+        ticket.whatsappId,
+        `${ticket.contact.number}@g.us`
+      );
 
-  try {
-    const { data } = await axios.get(
-      `https://api.z-api.io/instances/${instanceId}/token/${token}/group-members/${groupPhone}`,
-      { headers: { "Client-Token": clientToken } }
-    );
-    const zapiMembers: any[] = Array.isArray(data) ? data : (data?.members || data?.participants || []);
+      if (meta.participants.length > 0) {
+        // Enrich with names/photos of contacts we already know
+        const normalized = meta.participants.map(p => {
+          const digits = p.phone.replace(/\D/g, "");
+          return { ...p, digits, normalized: normalizeBrazilianPhone(digits) };
+        });
+        const known = await Contact.findAll({
+          where: {
+            number: {
+              [Op.in]: Array.from(
+                // (no flatMap: the backend targets ES6)
+                new Set(
+                  normalized
+                    .reduce<string[]>((acc, p) => acc.concat([p.digits, p.normalized]), [])
+                    .filter(Boolean)
+                )
+              )
+            }
+          },
+          attributes: ["id", "name", "number", "profilePicUrl"]
+        });
+        const byNumber = new Map(known.map(c => [c.number, c]));
 
-    if (zapiMembers.length > 0) {
-      // Merge Z-API list with DB names where available
-      const dbByPhone = new Map(dbMembers.map(m => [m.phone, m.name]));
-      const merged = zapiMembers.map(m => ({
-        phone: String(m.phone || m.id || "").replace(/@.+$/, "").replace(/\D/g, ""),
-        name: dbByPhone.get(String(m.phone || "").replace(/\D/g, "")) || m.name || m.pushName || m.phone || ""
-      })).filter(m => m.phone);
-      return res.json({ members: merged });
+        const members = normalized
+          .filter(p => p.digits)
+          .map(p => {
+            const c = byNumber.get(p.normalized) || byNumber.get(p.digits);
+            return {
+              phone: p.digits, // raw WhatsApp id digits — used for @mentions
+              name: c?.name || p.name || p.digits,
+              contactId: c?.id || null,
+              profilePicUrl: c?.profilePicUrl || null,
+              isAdmin: p.isAdmin || p.isSuperAdmin,
+              isSuperAdmin: p.isSuperAdmin
+            };
+          })
+          // Admins first, then alphabetical
+          .sort((a, b) =>
+            Number(b.isAdmin) - Number(a.isAdmin) ||
+            String(a.name).localeCompare(String(b.name), "pt-BR")
+          );
+
+        return res.json({
+          members,
+          subject: meta.subject || null,
+          description: meta.description || null,
+          source: "whatsapp"
+        });
+      }
+    } catch (err: any) {
+      logger.warn({
+        msg: "Z-API group-metadata failed, using DB fallback",
+        ticketId,
+        err: err?.response?.status || err?.message
+      });
     }
-  } catch (err: any) {
-    logger.warn({ msg: "Z-API group-members failed, using DB fallback", ticketId, err: err?.response?.status });
   }
 
-  return res.json({ members: dbMembers });
+  return res.json({ members: dbMembers, source: "history" });
 };
 
 export const forward = async (
@@ -276,4 +323,130 @@ export const remove = async (
   });
 
   return res.send();
+};
+
+// Loads the message + its chat id ("number@c.us" / "groupId@g.us")
+const loadReactionTarget = async (messageId: string) => {
+  const message = await Message.findByPk(messageId, {
+    include: [{ model: Ticket, include: [Contact] }]
+  });
+  if (!message || !message.ticket?.contact) {
+    throw new AppError("ERR_MESSAGE_NOT_FOUND", 404);
+  }
+  if (!message.ticket.whatsappId) {
+    throw new AppError("ERR_TICKET_NO_WHATSAPP");
+  }
+  const { contact } = message.ticket;
+  const chatId = `${contact.number}@${message.ticket.isGroup ? "g" : "c"}.us`;
+  return { message, chatId, whatsappId: message.ticket.whatsappId };
+};
+
+export const react = async (req: Request, res: Response): Promise<Response> => {
+  const { messageId } = req.params;
+  const emoji = String(req.body?.emoji || "").trim();
+  if (!emoji || emoji.length > 32) throw new AppError("ERR_INVALID_REACTION");
+
+  if (!whatsappProvider.sendReaction) {
+    throw new AppError("ERR_REACTIONS_NOT_SUPPORTED");
+  }
+
+  const { chatId, whatsappId } = await loadReactionTarget(messageId);
+
+  try {
+    await whatsappProvider.sendReaction(whatsappId, chatId, messageId, emoji);
+  } catch {
+    throw new AppError("ERR_SENDING_REACTION");
+  }
+
+  const agent = await User.findByPk(Number(req.user.id), { attributes: ["id", "name"] });
+  await SetMessageReactionService({
+    messageId,
+    senderNumber: "me",
+    emoji,
+    fromMe: true,
+    senderName: agent?.name,
+    userId: agent?.id
+  });
+
+  return res.status(200).json({ ok: true });
+};
+
+export const unreact = async (req: Request, res: Response): Promise<Response> => {
+  const { messageId } = req.params;
+
+  if (!whatsappProvider.removeReaction) {
+    throw new AppError("ERR_REACTIONS_NOT_SUPPORTED");
+  }
+
+  const { chatId, whatsappId } = await loadReactionTarget(messageId);
+
+  try {
+    await whatsappProvider.removeReaction(whatsappId, chatId, messageId);
+  } catch {
+    throw new AppError("ERR_SENDING_REACTION");
+  }
+
+  await SetMessageReactionService({
+    messageId,
+    senderNumber: "me",
+    emoji: "",
+    fromMe: true
+  });
+
+  return res.status(200).json({ ok: true });
+};
+
+// Share a contact card in the ticket's chat (POST /messages/:ticketId/contact)
+export const sendContact = async (req: Request, res: Response): Promise<Response> => {
+  const { ticketId } = req.params;
+  const contactName = String(req.body?.contactName || "").trim();
+  const contactPhone = String(req.body?.contactPhone || "").replace(/\D/g, "");
+  const quotedMsgId: string | undefined = req.body?.quotedMsgId || undefined;
+
+  if (!contactName || contactPhone.length < 8) {
+    throw new AppError("ERR_INVALID_CONTACT_CARD");
+  }
+  if (!whatsappProvider.sendContact) {
+    throw new AppError("ERR_SEND_CONTACT_NOT_SUPPORTED");
+  }
+
+  const ticket = await ShowTicketService(ticketId);
+  if (!ticket.whatsappId) throw new AppError("ERR_TICKET_NO_WHATSAPP");
+  SetTicketMessagesAsRead(ticket);
+
+  const chatId = `${ticket.contact.number}@${ticket.isGroup ? "g" : "c"}.us`;
+
+  let sent;
+  try {
+    sent = await whatsappProvider.sendContact(
+      ticket.whatsappId,
+      chatId,
+      contactName,
+      contactPhone,
+      quotedMsgId
+    );
+  } catch {
+    throw new AppError("ERR_SENDING_WAPP_MSG");
+  }
+
+  // Same vCard format used for received contact cards, so the chat renders it
+  // with the existing VcardPreview component.
+  const vcard = `BEGIN:VCARD\nVERSION:3.0\nFN:${contactName}\nTEL;type=CELL;waid=${contactPhone}:+${contactPhone}\nEND:VCARD`;
+
+  await ticket.update({ lastMessage: `👤 ${contactName}` });
+
+  await CreateMessageService({
+    messageData: {
+      id: sent.id,
+      ticketId: ticket.id,
+      body: vcard,
+      fromMe: true,
+      read: true,
+      mediaType: "vcard",
+      ack: 1,
+      ...(quotedMsgId && { quotedMsgId })
+    }
+  });
+
+  return res.status(200).json({ ok: true });
 };

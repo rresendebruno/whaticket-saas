@@ -177,6 +177,8 @@ const Ticket = () => {
         handleDrawerClose={handleDrawerClose}
         contact={contact}
         loading={loading}
+        ticketId={ticketId}
+        isGroup={ticket.isGroup}
       />
     </div>
   );

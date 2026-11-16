@@ -35,6 +35,7 @@ import VcardPreview from "../VcardPreview";
 import LocationPreview from "../LocationPreview";
 import ModalImageCors from "../ModalImageCors";
 import MessageOptionsMenu from "../MessageOptionsMenu";
+import MessageReactions, { hasReactions } from "../MessageReactions";
 import ForwardMessageModal from "../ForwardMessageModal";
 import whatsBackground from "../../assets/wa-background.png";
 
@@ -208,6 +209,14 @@ const useStyles = makeStyles((theme) => ({
     padding: "3px 80px 6px 6px",
   },
 
+  messageSticker: {
+    width: 150,
+    height: 150,
+    objectFit: "contain",
+    background: "transparent",
+    display: "block",
+  },
+
   messageMedia: {
     objectFit: "cover",
     width: 250,
@@ -374,7 +383,17 @@ const reducer = (state, action) => {
     const messageIndex = state.findIndex((m) => m.id === messageToUpdate.id);
 
     if (messageIndex !== -1) {
-      state[messageIndex] = messageToUpdate;
+      // Some updates (e.g. delivery ticks) don't include reactions — keep the
+      // ones we already have instead of wiping them.
+      const previous = state[messageIndex];
+      state[messageIndex] = {
+        ...previous,
+        ...messageToUpdate,
+        reactions:
+          messageToUpdate.reactions !== undefined
+            ? messageToUpdate.reactions
+            : previous.reactions,
+      };
     }
 
     return [...state];
@@ -499,6 +518,14 @@ const MessagesList = ({ ticketId, isGroup }) => {
     setAnchorEl(null);
   };
 
+  const handleRemoveReaction = async (message) => {
+    try {
+      await api.delete(`/messages/${message.id}/reactions`);
+    } catch (err) {
+      toastError(err);
+    }
+  };
+
   const handleStartForward = (message) => {
     setSelectionMode(true);
     setSelectedMessages(new Set([message.id]));
@@ -572,7 +599,15 @@ const MessagesList = ({ ticketId, isGroup }) => {
         )
       } else return (<></>)
     }*/
-    else if (message.mediaType === "image") {
+    else if (message.mediaType === "sticker") {
+      return (
+        <img
+          className={classes.messageSticker}
+          src={withToken(message.mediaUrl)}
+          alt="Figurinha"
+        />
+      );
+    } else if (message.mediaType === "image") {
       return <ModalImageCors imageUrl={message.mediaUrl} />;
     } else if (message.mediaType === "audio") {
       return <Audio url={withToken(message.mediaUrl)} />
@@ -743,7 +778,11 @@ const MessagesList = ({ ticketId, isGroup }) => {
                     />
                   </div>
                 )}
-                <div className={classes.messageLeft}>
+                <div
+                  className={classes.messageLeft}
+                  style={hasReactions(message) ? { marginBottom: 16 } : undefined}
+                >
+                  <MessageReactions message={message} onRemoveMine={handleRemoveReaction} />
                   {!selectionMode && (
                     <IconButton
                       variant="contained"
@@ -772,7 +811,9 @@ const MessagesList = ({ ticketId, isGroup }) => {
                       </span>
                     )}
                     {message.quotedMsg && renderQuotedMessage(message)}
-                    <MarkdownWrapper>{message.body}</MarkdownWrapper>
+                    {message.mediaType !== "sticker" && (
+                      <MarkdownWrapper>{message.body}</MarkdownWrapper>
+                    )}
                     <span className={classes.timestamp}>
                       {format(parseISO(message.createdAt), "HH:mm")}
                     </span>
@@ -793,7 +834,11 @@ const MessagesList = ({ ticketId, isGroup }) => {
                 style={{ justifyContent: "flex-end", ...(selectionMode && { cursor: "pointer" }) }}
                 onClick={selectionMode ? () => handleToggleSelection(message.id) : undefined}
               >
-                <div className={classes.messageRight}>
+                <div
+                  className={classes.messageRight}
+                  style={hasReactions(message) ? { marginBottom: 16 } : undefined}
+                >
+                  <MessageReactions message={message} onRemoveMine={handleRemoveReaction} />
                   {!selectionMode && (
                     <IconButton
                       variant="contained"
@@ -832,7 +877,9 @@ const MessagesList = ({ ticketId, isGroup }) => {
                     ) : (
                       <>
                         {message.quotedMsg && renderQuotedMessage(message)}
-                        <MarkdownWrapper>{message.body}</MarkdownWrapper>
+                        {message.mediaType !== "sticker" && (
+                          <MarkdownWrapper>{message.body}</MarkdownWrapper>
+                        )}
                       </>
                     )}
                     <span className={classes.timestamp}>

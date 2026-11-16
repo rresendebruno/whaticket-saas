@@ -12,6 +12,12 @@ contactRoutes.post(
   ImportPhoneContactsController.store
 );
 
+contactRoutes.post(
+  "/contacts/import-groups",
+  isAuth,
+  ImportPhoneContactsController.storeGroups
+);
+
 contactRoutes.get("/contacts", isAuth, ContactController.index);
 
 contactRoutes.get("/contacts/:contactId", isAuth, ContactController.show);

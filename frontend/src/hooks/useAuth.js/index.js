@@ -119,7 +119,10 @@ const useAuth = () => {
 		}
 	};
 
-	return { isAuth, user, loading, handleLogin, handleLogout };
+	// Lets screens (profile / forced password change) refresh the logged user
+	const updateUser = updated => setUser(prev => ({ ...prev, ...updated }));
+
+	return { isAuth, user, loading, handleLogin, handleLogout, updateUser };
 };
 
 export default useAuth;
