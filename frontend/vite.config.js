@@ -13,7 +13,9 @@ export default defineConfig({
   },
   build: {
     outDir: "build",
-    sourcemap: true,
+    // Off in production: sourcemaps doubled build time/memory on the VPS and
+    // published the original frontend source code.
+    sourcemap: false,
     rollupOptions: {
       output: {
         manualChunks: {

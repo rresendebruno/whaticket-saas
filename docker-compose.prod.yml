@@ -4,7 +4,7 @@ version: '3'
 # WhaTicket Community - Produção com Traefik
 # ============================================================
 # Pré-requisitos na VPS:
-#   - Traefik v2+ rodando com rede externa chamada "proxy"
+#   - Traefik v2+ rodando com rede externa "traefik-network"
 #     (se sua rede tem outro nome, ajuste todas as ocorrências de
 #      "proxy" neste arquivo e no label traefik.docker.network)
 #   - Entrypoints: "web" (porta 80) e "websecure" (porta 443)
@@ -29,7 +29,10 @@ version: '3'
 networks:
   whaticket:
   proxy:
-    external: true  # rede criada pelo Traefik na VPS
+    external: true
+    # Rede real do Traefik na VPS (/opt/traefik). Usar a mesma rede do Traefik
+    # evita 504 em todo o sistema quando o Traefik e recriado.
+    name: traefik-network
 
 services:
 
@@ -62,7 +65,7 @@ services:
       - mysql
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=proxy"
+      - "traefik.docker.network=traefik-network"
       - "traefik.http.routers.whaticket-backend.rule=Host(`api.cloudconnectivity.com.br`)"
       - "traefik.http.routers.whaticket-backend.entrypoints=websecure"
       - "traefik.http.routers.whaticket-backend.tls.certresolver=letsencrypt"
@@ -93,7 +96,7 @@ services:
       - backend
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=proxy"
+      - "traefik.docker.network=traefik-network"
       - "traefik.http.routers.whaticket-frontend.rule=Host(`chat.cloudconnectivity.com.br`)"
       - "traefik.http.routers.whaticket-frontend.entrypoints=websecure"
       - "traefik.http.routers.whaticket-frontend.tls.certresolver=letsencrypt"
@@ -102,6 +105,10 @@ services:
       - "traefik.http.routers.whaticket-frontend-http.rule=Host(`chat.cloudconnectivity.com.br`)"
       - "traefik.http.routers.whaticket-frontend-http.entrypoints=web"
       - "traefik.http.routers.whaticket-frontend-http.middlewares=whaticket-https-redirect"
+      # Definido tambem aqui (identico ao do backend) para o redirect do frontend
+      # nao quebrar quando o backend estiver reiniciando.
+      - "traefik.http.middlewares.whaticket-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.whaticket-https-redirect.redirectscheme.permanent=true"
 
   mysql:
     image: ${MYSQL_ENGINE:-mariadb}:${MYSQL_VERSION:-10.6}

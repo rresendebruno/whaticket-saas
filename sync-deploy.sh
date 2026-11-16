@@ -35,7 +35,8 @@ echo ""
 TAR_EXCLUDES=(
   --exclude="./.git"
   --exclude="./.claude"
-  --exclude="./node_modules"
+  --exclude="node_modules"
+  --exclude="whaticket-deploy-*.tar.gz"
   --exclude="./.docker"
   --exclude="./backend/public"
   --exclude="./backend/.env"
@@ -57,8 +58,12 @@ if $DRY_RUN; then
   exit 0
 fi
 
-# Gera tar localmente (mais confiavel que pipe direto)
-TMPFILE="whaticket-deploy-tmp.tar.gz"
+# Gera tar localmente (mais confiavel que pipe direto).
+# O arquivo PRECISA ficar fora da pasta empacotada; senao o tar le o proprio
+# arquivo enquanto ele cresce e falha com "file changed as we read it".
+TMPFILE="$(mktemp -t whaticket-deploy-XXXXXX).tar.gz"
+trap 'rm -f "$TMPFILE"' EXIT
+rm -f whaticket-deploy-tmp.tar.gz  # sobra de execucoes antigas
 echo "Empacotando arquivos localmente..."
 tar "${TAR_EXCLUDES[@]}" -czf "$TMPFILE" .
 SIZE=$(du -sh "$TMPFILE" | cut -f1)
@@ -73,7 +78,10 @@ echo ""
 
 echo "Extraindo na VPS..."
 ssh $SSH_OPTS "${VPS_USER}@${VPS_HOST}" "
-  sudo chown -R ${VPS_USER}:${VPS_USER} '${VPS_PATH}' 2>/dev/null || true
+  # NAO mexer no dono de .docker (dados do MariaDB, dono = usuario mysql do
+  # container) nem de ssl; trocar o dono deles quebra o banco (errno 13).
+  sudo find '${VPS_PATH}' \\( -path '${VPS_PATH}/.docker' -o -path '${VPS_PATH}/ssl' \\) -prune \
+    -o -exec chown ${VPS_USER}:${VPS_USER} {} + 2>/dev/null || true
   cd '${VPS_PATH}'
   tar xzf /tmp/whaticket-deploy.tar.gz --overwrite --no-same-owner --no-same-permissions
   rm -f /tmp/whaticket-deploy.tar.gz
@@ -91,10 +99,12 @@ echo "(Pode levar varios minutos)"
 echo ""
 
 ssh $SSH_OPTS "${VPS_USER}@${VPS_HOST}" "
-  set -e
+  # pipefail: without it, 'build | tee' hides a failed build and the script
+  # printed 'Deploy concluido!' even when nothing was deployed.
+  set -eo pipefail
   cd '${VPS_PATH}'
-  echo 'Parando containers...'
-  sudo docker-compose -f '${COMPOSE_FILE}' stop backend frontend
+  # Builda com os containers antigos ainda no ar; o 'up -d' abaixo troca
+  # pelos novos so no final, deixando o sistema fora do ar so por segundos.
   echo 'Buildando (log em /tmp/docker-build.log)...'
   sudo docker-compose -f '${COMPOSE_FILE}' build backend frontend 2>&1 | tee /tmp/docker-build.log
   echo 'Subindo containers...'

@@ -4,3 +4,9 @@
 node_modules
 dist
 .wwebjs_auth
+.wwebjs_cache
+# Midias dos atendimentos: em producao entram pelo volume ./backend/public
+# (docker-compose.prod.yml). Nao devem ir para o build nem para a imagem.
+public
+*.log
+logs
