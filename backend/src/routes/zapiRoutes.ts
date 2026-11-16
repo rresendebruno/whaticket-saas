@@ -317,9 +317,9 @@ router.post("/zapi/webhook/:whatsappId", async (req: Request, res: Response) => 
       lid: contactLid,
       // In group messages "photo" is the chat (group) photo — only use the
       // sender's own photo for the participant contact.
-      profilePicUrl: isGroup
-        ? payload.senderPhoto || undefined
-        : payload.senderPhoto || payload.photo || undefined,
+      // Z-API may send the string "null" — accept only real URLs
+      profilePicUrl: [isGroup ? payload.senderPhoto : payload.senderPhoto || payload.photo]
+        .map(v => (typeof v === "string" && /^https?:\/\//i.test(v) ? v : undefined))[0],
       isGroup: false
     };
 

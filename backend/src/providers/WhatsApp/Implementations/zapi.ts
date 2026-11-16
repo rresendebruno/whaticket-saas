@@ -374,13 +374,34 @@ const getProfilePicUrl = async (
   number: string
 ): Promise<string> => {
   const phone = cleanPhone(number);
+
+  // Z-API answers "no photo" with the STRING "null" ({"link":"null"}), which
+  // must not be stored as a URL.
+  const validUrl = (v: unknown): string => {
+    const s = typeof v === "string" ? v.trim() : "";
+    return /^https?:\/\//i.test(s) ? s : "";
+  };
+
+  // 1) GET /profile-picture?phone= — documented for contacts
   try {
     const result = await zapiGet(`/profile-picture?phone=${encodeURIComponent(phone)}`);
-    // Z-API documents the field as "link" (older code read "value")
-    return result?.link || result?.value || "";
+    const url = validUrl(result?.link) || validUrl(result?.value);
+    if (url) return url;
   } catch {
-    return "";
+    // fall through
   }
+
+  // 2) GET /chats/{phone} — "profileThumbnail: URL da foto do chat"; also
+  //    covers groups, whose photo the endpoint above may not return.
+  try {
+    const chat = await zapiGet(`/chats/${encodeURIComponent(phone)}`);
+    const url = validUrl(chat?.profileThumbnail) || validUrl(chat?.imgUrl);
+    if (url) return url;
+  } catch {
+    // no photo / not accessible
+  }
+
+  return "";
 };
 
 const getContacts = async (_sessionId: number): Promise<ProviderContact[]> => {
