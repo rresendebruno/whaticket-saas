@@ -21,7 +21,7 @@ import SendWhatsAppMessage from "../services/WbotServices/SendWhatsAppMessage";
  *   POST /api/v1/ticket            (application/json or multipart/form-data)
  *     number*      digits with country+area code (or group id when isGroup)
  *     name, body, queueId, whatsappId, autoOpen (default true)
- *     (groups/communities: queueId only sets the FIRST queue; never changes it)
+ *     (groups/communities: queueId is IGNORED; the API never sets their queue)
  *     multipart only: media (file, body becomes the caption), isGroup ("true")
  *   -> 200 { ticketId, status, contact: {id,name,number}, whatsappId, queueId, createdAt }
  *
@@ -125,46 +125,49 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
 
   const oldStatus = ticket?.status;
 
-  // Groups and communities have their queue locked: the API never changes it.
-  // "queueId" only applies to a group that has never had a queue (first
-  // ticket); after that it is ignored and the group keeps its own queue.
+  // Groups and communities: the API NEVER sets or changes their queue. The
+  // "queueId" sent is ignored. An existing ticket keeps its queue; a new one
+  // inherits the group's last queue or, for a group never queued, goes to the
+  // "Grupos e comunidades" queue (looked up by name).
   const queueLocked = isGroup || Boolean(contact.isGroup);
-  let effectiveQueueId = queueId;
-  if (queueLocked) {
-    const lastWithQueue = ticket?.queueId
-      ? ticket
-      : await Ticket.findOne({
-          where: { contactId: contact.id, queueId: { [Op.not]: null } as any },
-          order: [["updatedAt", "DESC"]]
-        });
-    if (lastWithQueue?.queueId) {
-      if (queueId && queueId !== lastWithQueue.queueId) {
-        logger.info({
-          msg: "API v1: queueId ignored for group (queue locked)",
-          contactId: contact.id,
-          requestedQueueId: queueId,
-          keptQueueId: lastWithQueue.queueId
-        });
-      }
-      effectiveQueueId = lastWithQueue.queueId;
-    }
+
+  if (queueLocked && queueId) {
+    logger.info({
+      msg: "API v1: queueId ignored for group (queue locked)",
+      contactId: contact.id,
+      requestedQueueId: queueId,
+      ticketId: ticket?.id
+    });
   }
 
   if (!ticket) {
+    let newQueueId = queueId;
+    if (queueLocked) {
+      const lastWithQueue = await Ticket.findOne({
+        where: { contactId: contact.id, queueId: { [Op.not]: null } as any },
+        order: [["updatedAt", "DESC"]]
+      });
+      const groupsQueue = lastWithQueue?.queueId
+        ? null
+        : await Queue.findOne({ where: { name: { [Op.like]: "%grupo%" } } });
+      newQueueId = lastWithQueue?.queueId || groupsQueue?.id || undefined;
+    }
+
     const whatsappId = whatsappIdParam || (await GetDefaultWhatsApp()).id;
     ticket = await Ticket.create({
       contactId: contact.id,
       status: autoOpen ? "open" : "pending",
-      isGroup,
+      isGroup: queueLocked,
       unreadMessages: 0,
       whatsappId,
-      ...(effectiveQueueId ? { queueId: effectiveQueueId } : {})
+      ...(newQueueId ? { queueId: newQueueId } : {})
     });
   } else {
-    // 3. Assign queue and open without manual acceptance (keeps the agent)
+    // 3. Assign queue (never for groups) and open without manual acceptance
+    //    (keeps the agent)
     const updates: Record<string, unknown> = {};
-    if (effectiveQueueId && ticket.queueId !== effectiveQueueId) {
-      updates.queueId = effectiveQueueId;
+    if (!queueLocked && queueId && ticket.queueId !== queueId) {
+      updates.queueId = queueId;
     }
     if (autoOpen && ticket.status === "pending") updates.status = "open";
     if (Object.keys(updates).length > 0) await ticket.update(updates);
