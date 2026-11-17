@@ -21,6 +21,7 @@ import SendWhatsAppMessage from "../services/WbotServices/SendWhatsAppMessage";
  *   POST /api/v1/ticket            (application/json or multipart/form-data)
  *     number*      digits with country+area code (or group id when isGroup)
  *     name, body, queueId, whatsappId, autoOpen (default true)
+ *     (groups/communities: queueId only sets the FIRST queue; never changes it)
  *     multipart only: media (file, body becomes the caption), isGroup ("true")
  *   -> 200 { ticketId, status, contact: {id,name,number}, whatsappId, queueId, createdAt }
  *
@@ -124,6 +125,31 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
 
   const oldStatus = ticket?.status;
 
+  // Groups and communities have their queue locked: the API never changes it.
+  // "queueId" only applies to a group that has never had a queue (first
+  // ticket); after that it is ignored and the group keeps its own queue.
+  const queueLocked = isGroup || Boolean(contact.isGroup);
+  let effectiveQueueId = queueId;
+  if (queueLocked) {
+    const lastWithQueue = ticket?.queueId
+      ? ticket
+      : await Ticket.findOne({
+          where: { contactId: contact.id, queueId: { [Op.not]: null } as any },
+          order: [["updatedAt", "DESC"]]
+        });
+    if (lastWithQueue?.queueId) {
+      if (queueId && queueId !== lastWithQueue.queueId) {
+        logger.info({
+          msg: "API v1: queueId ignored for group (queue locked)",
+          contactId: contact.id,
+          requestedQueueId: queueId,
+          keptQueueId: lastWithQueue.queueId
+        });
+      }
+      effectiveQueueId = lastWithQueue.queueId;
+    }
+  }
+
   if (!ticket) {
     const whatsappId = whatsappIdParam || (await GetDefaultWhatsApp()).id;
     ticket = await Ticket.create({
@@ -132,12 +158,14 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
       isGroup,
       unreadMessages: 0,
       whatsappId,
-      ...(queueId ? { queueId } : {})
+      ...(effectiveQueueId ? { queueId: effectiveQueueId } : {})
     });
   } else {
     // 3. Assign queue and open without manual acceptance (keeps the agent)
     const updates: Record<string, unknown> = {};
-    if (queueId && ticket.queueId !== queueId) updates.queueId = queueId;
+    if (effectiveQueueId && ticket.queueId !== effectiveQueueId) {
+      updates.queueId = effectiveQueueId;
+    }
     if (autoOpen && ticket.status === "pending") updates.status = "open";
     if (Object.keys(updates).length > 0) await ticket.update(updates);
   }
