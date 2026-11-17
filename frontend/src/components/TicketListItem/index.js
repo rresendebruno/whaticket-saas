@@ -13,6 +13,7 @@ import Typography from "@material-ui/core/Typography";
 import Avatar from "@material-ui/core/Avatar";
 import Divider from "@material-ui/core/Divider";
 import Badge from "@material-ui/core/Badge";
+import Dialog from "@material-ui/core/Dialog";
 
 import { i18n } from "../../translate/i18n";
 
@@ -31,6 +32,18 @@ const useStyles = makeStyles(theme => ({
 
 	pendingTicket: {
 		cursor: "unset",
+	},
+
+	clickableAvatar: {
+		cursor: "zoom-in",
+	},
+
+	avatarPreview: {
+		display: "block",
+		maxWidth: "min(500px, 90vw)",
+		maxHeight: "80vh",
+		width: "100%",
+		objectFit: "contain",
 	},
 
 	noTicketsDiv: {
@@ -122,6 +135,7 @@ const TicketListItem = ({ ticket }) => {
 	const history = useHistory();
 	const [loading, setLoading] = useState(false);
 	const [acceptModalOpen, setAcceptModalOpen] = useState(false);
+	const [avatarOpen, setAvatarOpen] = useState(false);
 	const { ticketId } = useParams();
 	const isMounted = useRef(true);
 	const { user } = useContext(AuthContext);
@@ -194,7 +208,18 @@ const TicketListItem = ({ ticket }) => {
 					></span>
 				</Tooltip>
 				<ListItemAvatar>
-					<Avatar src={ticket?.contact?.profilePicUrl} />
+					<Avatar
+						src={ticket?.contact?.profilePicUrl}
+						className={
+							ticket?.contact?.profilePicUrl ? classes.clickableAvatar : undefined
+						}
+						onClick={e => {
+							// Show the photo larger instead of opening the ticket
+							if (!ticket?.contact?.profilePicUrl) return;
+							e.stopPropagation();
+							setAvatarOpen(true);
+						}}
+					/>
 				</ListItemAvatar>
 				<ListItemText
 					disableTypography
@@ -274,6 +299,25 @@ const TicketListItem = ({ ticket }) => {
 				)}
 			</ListItem>
 			<Divider variant="inset" component="li" />
+			<Dialog
+				open={avatarOpen}
+				onClose={() => setAvatarOpen(false)}
+				onClick={e => {
+					// The dialog is a portal, but React still bubbles its clicks to the
+					// ListItem above, which would open the ticket.
+					e.stopPropagation();
+					setAvatarOpen(false);
+				}}
+				maxWidth={false}
+			>
+				{avatarOpen && (
+					<img
+						src={ticket?.contact?.profilePicUrl}
+						alt={ticket?.contact?.name || ""}
+						className={classes.avatarPreview}
+					/>
+				)}
+			</Dialog>
 			<AcceptTicketWithQueueModal
 				open={acceptModalOpen}
 				onClose={() => setAcceptModalOpen(false)}
