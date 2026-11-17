@@ -65,10 +65,15 @@ const zapiDelete = async (path: string, params?: Record<string, string | boolean
 
 // For groups (@g.us): strip only the suffix, keep full alphanumeric ID (e.g. "120363xxx-ABCdef")
 // For individuals (@c.us / @s.whatsapp.net): strip suffix and keep only digits
+const isOldGroupId = (to: string): boolean =>
+  /^\d{8,15}-\d{8,12}(@g\.us)?$/.test(to.trim());
+
 const cleanPhone = (to: string): string => {
   // Group IDs ("120363...-group") must keep their suffix. They arrive either
   // as "<id>@g.us" or as the raw stored contact number "<id>-group".
-  if (to.includes("@g.us") || /-group$/i.test(to)) {
+  // Old-style groups (created before ~2021) use "<creator phone>-<timestamp>",
+  // e.g. "556284366894-1592821599"; the hyphen must not be stripped either.
+  if (to.includes("@g.us") || /-group$/i.test(to) || isOldGroupId(to)) {
     return to.replace(/@g\.us$/, "");
   }
   return to.replace(/@c\.us|@s\.whatsapp\.net/g, "").replace(/[^\d]/g, "");
@@ -375,6 +380,13 @@ const getProfilePicUrl = async (
 ): Promise<string> => {
   const phone = cleanPhone(number);
 
+  // Groups are tried with and without the "-group" suffix: new groups
+  // ("120363...") are known by Z-API as "<id>-group", while old-style groups
+  // ("556284366894-1592821599") may be stored/accepted in either form.
+  const isGroupId = /-group$/i.test(phone) || isOldGroupId(phone);
+  const base = phone.replace(/-group$/i, "");
+  const candidates = isGroupId ? [`${base}-group`, base] : [phone];
+
   // Z-API answers "no photo" with the STRING "null" ({"link":"null"}), which
   // must not be stored as a URL.
   const validUrl = (v: unknown): string => {
@@ -382,24 +394,29 @@ const getProfilePicUrl = async (
     return /^https?:\/\//i.test(s) ? s : "";
   };
 
-  // 1) GET /profile-picture?phone= — documented for contacts
-  try {
-    const result = await zapiGet(`/profile-picture?phone=${encodeURIComponent(phone)}`);
-    const url = validUrl(result?.link) || validUrl(result?.value);
-    if (url) return url;
-  } catch {
-    // fall through
-  }
+  // Sequential on purpose: stop at the first ID that returns a photo.
+  /* eslint-disable no-restricted-syntax, no-await-in-loop */
+  for (const id of candidates) {
+    // 1) GET /profile-picture?phone= — documented for contacts
+    try {
+      const result = await zapiGet(`/profile-picture?phone=${encodeURIComponent(id)}`);
+      const url = validUrl(result?.link) || validUrl(result?.value);
+      if (url) return url;
+    } catch {
+      // fall through
+    }
 
-  // 2) GET /chats/{phone} — "profileThumbnail: URL da foto do chat"; also
-  //    covers groups, whose photo the endpoint above may not return.
-  try {
-    const chat = await zapiGet(`/chats/${encodeURIComponent(phone)}`);
-    const url = validUrl(chat?.profileThumbnail) || validUrl(chat?.imgUrl);
-    if (url) return url;
-  } catch {
-    // no photo / not accessible
+    // 2) GET /chats/{phone} — "profileThumbnail: URL da foto do chat"; also
+    //    covers groups, whose photo the endpoint above may not return.
+    try {
+      const chat = await zapiGet(`/chats/${encodeURIComponent(id)}`);
+      const url = validUrl(chat?.profileThumbnail) || validUrl(chat?.imgUrl);
+      if (url) return url;
+    } catch {
+      // no photo / not accessible
+    }
   }
+  /* eslint-enable no-restricted-syntax, no-await-in-loop */
 
   return "";
 };
