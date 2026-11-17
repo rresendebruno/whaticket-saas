@@ -11,6 +11,7 @@ import whatsappSessionRoutes from "./whatsappSessionRoutes";
 import queueRoutes from "./queueRoutes";
 import quickAnswerRoutes from "./quickAnswerRoutes";
 import apiRoutes from "./apiRoutes";
+import apiV1Routes from "./apiV1Routes";
 import chatbotRoutes from "./chatbotRoutes";
 import reportRoutes from "./reportRoutes";
 import stickerRoutes from "./stickerRoutes";
@@ -28,7 +29,9 @@ routes.use(messageRoutes);
 routes.use(whatsappSessionRoutes);
 routes.use(queueRoutes);
 routes.use(quickAnswerRoutes);
-routes.use("/api/messages", apiRoutes);
+routes.use("/api/messages", apiRoutes); // legacy: POST /api/messages/send
+// External API v1 MUST be mounted at /api/v1 (not under /api/messages)
+routes.use("/api/v1", apiV1Routes);
 routes.use(chatbotRoutes);
 routes.use(reportRoutes);
 routes.use(stickerRoutes);

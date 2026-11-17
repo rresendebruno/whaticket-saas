@@ -4,6 +4,13 @@
 #   bash sync-deploy.sh            -- sincroniza e reconstroi containers
 #   bash sync-deploy.sh --dry-run  -- lista arquivos sem enviar
 #   bash sync-deploy.sh --only-sync -- sincroniza sem reconstruir
+#   bash sync-deploy.sh --allow-dirty -- permite enviar alteracoes NAO commitadas
+#
+# Regras (evitam a regressao da API v1 de 03/08 e 16/11/2026, quando codigo
+# nao commitado foi sobrescrito por outro deploy):
+#   - so faz deploy da branch "master" e sem alteracoes pendentes;
+#   - roda o teste das rotas da API externa antes de enviar;
+#   - depois do deploy confere que POST /api/v1/ticket responde 401 (e nao 404).
 
 VPS_USER="ubuntu"
 VPS_HOST="187.84.150.219"
@@ -16,14 +23,52 @@ set -euo pipefail
 
 DRY_RUN=false
 ONLY_SYNC=false
+ALLOW_DIRTY=false
+DEPLOY_BRANCH="master"
+API_URL="https://api.cloudconnectivity.com.br"
 
 for arg in "$@"; do
   case $arg in
-    --dry-run)   DRY_RUN=true ;;
-    --only-sync) ONLY_SYNC=true ;;
+    --dry-run)     DRY_RUN=true ;;
+    --only-sync)   ONLY_SYNC=true ;;
+    --allow-dirty) ALLOW_DIRTY=true ;;
     *) echo "Opcao desconhecida: $arg"; exit 1 ;;
   esac
 done
+
+# ---------- Verificacoes antes do deploy ----------
+if ! $DRY_RUN; then
+  BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+  if [ "$BRANCH" != "$DEPLOY_BRANCH" ]; then
+    echo "ERRO: deploy so a partir da branch '$DEPLOY_BRANCH' (atual: '$BRANCH')."
+    exit 1
+  fi
+
+  PENDING="$(git status --porcelain)"
+  if [ -n "$PENDING" ] && ! $ALLOW_DIRTY; then
+    echo "ERRO: ha alteracoes NAO commitadas. Elas iriam para producao sem"
+    echo "estar no git e se perderiam no proximo deploy:"
+    echo "$PENDING" | head -20
+    echo ""
+    echo "Faca o commit (ou use --allow-dirty se tiver certeza)."
+    exit 1
+  fi
+
+  echo "Versao: $BRANCH @ $(git rev-parse --short HEAD) — $(git log -1 --format=%s)"
+
+  if [ -d backend/node_modules ]; then
+    echo "Testando rotas da API externa (/api/v1)..."
+    if ! (cd backend && npx jest src/__tests__/api --coverage=false --silent >/tmp/api-routes-test.log 2>&1); then
+      echo "ERRO: teste das rotas da API falhou. Deploy cancelado."
+      tail -30 /tmp/api-routes-test.log
+      exit 1
+    fi
+    echo "Rotas da API OK."
+  else
+    echo "AVISO: backend/node_modules ausente — teste das rotas da API pulado."
+    echo "       (rode 'npm install' em backend/ para ativar)"
+  fi
+fi
 
 echo ""
 echo "======================================================"
@@ -111,6 +156,29 @@ ssh $SSH_OPTS "${VPS_USER}@${VPS_HOST}" "
   sudo docker-compose -f '${COMPOSE_FILE}' up -d backend frontend
   sudo docker-compose -f '${COMPOSE_FILE}' ps
 "
+
+# ---------- Checagem pos-deploy da API externa ----------
+# O backend leva alguns segundos (migrations) para subir. Sem token, a rota
+# deve responder 401; 404 significa que /api/v1/ticket nao esta registrada.
+echo ""
+echo "Conferindo POST ${API_URL}/api/v1/ticket (esperado: 401)..."
+CODE="000"
+for _ in $(seq 1 30); do
+  CODE="$(curl -s -o /dev/null -w '%{http_code}' -m 10 -X POST \
+    "${API_URL}/api/v1/ticket" -H 'Content-Type: application/json' -d '{}' || true)"
+  [ "$CODE" = "401" ] && break
+  sleep 5
+done
+if [ "$CODE" != "401" ]; then
+  echo ""
+  echo "######################################################"
+  echo "  ATENCAO: /api/v1/ticket respondeu HTTP $CODE (esperado 401)."
+  echo "  404 = rota nao registrada; 000/502/504 = backend fora do ar."
+  echo "  O sistema de cotacoes pode estar sem integracao!"
+  echo "######################################################"
+  exit 1
+fi
+echo "API externa OK (HTTP 401 sem token)."
 
 echo ""
 echo "======================================================"
