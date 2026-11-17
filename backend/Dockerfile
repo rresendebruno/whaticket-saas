@@ -3,7 +3,10 @@ FROM node:18 AS build
 
 # Chrome/Chromium nao e necessario: a conexao usada e a Z-API (HTTP).
 # So o provider antigo "wwebjs" (QR code) precisaria dele.
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+# Puppeteer novo (dependencia do whatsapp-web.js) so respeita
+# PUPPETEER_SKIP_DOWNLOAD; o nome antigo fica para versoes antigas.
+ENV PUPPETEER_SKIP_DOWNLOAD=true \
+    PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
 WORKDIR /usr/src/app
 COPY package*.json ./
